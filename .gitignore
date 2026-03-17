@@ -1,0 +1,30 @@
+# node_modules
+node_modules/
+frontend/node_modules/
+
+# Expo
+.expo/
+frontend/.expo/
+frontend/dist/
+frontend/web-build/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+frontend/.env
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build outputs
+build/
+bin/
+obj/
