@@ -11,13 +11,18 @@ import { InviteScreen } from '../screens/InviteScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
 import { RootStackParamList } from './types';
 
+import { useTheme } from '../context/ThemeContext';
+import { LinearGradient } from 'expo-linear-gradient';
+
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 const LoadingScreen = () => {
+  const { colors, isDark } = useTheme();
   return (
-    <View style={styles.loading}>
-      <ActivityIndicator size="large" color="#E91E63" />
-      <Text style={styles.loadingText}>Loading...</Text>
+    <View style={[styles.loading, { backgroundColor: colors.background }]}>
+      <LinearGradient colors={['rgba(210, 118, 25, 0.2)', 'transparent'] as any} style={{ position: 'absolute', top: -100, right: -50, width: 350, height: 350, borderRadius: 175 }} />
+      <ActivityIndicator size="large" color={colors.primary} />
+      <Text style={[styles.loadingText, { color: colors.text }]}>Preparing your space...</Text>
     </View>
   );
 };
@@ -27,12 +32,12 @@ const styles = StyleSheet.create({
     flex: 1, 
     justifyContent: 'center', 
     alignItems: 'center',
-    backgroundColor: '#FCE4EC'
   },
   loadingText: {
-    marginTop: 16,
+    marginTop: 20,
     fontSize: 16,
-    color: '#E91E63'
+    fontWeight: '700',
+    letterSpacing: 0.5
   }
 });
 

@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Linking, Platform, ActivityIndicator } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Linking, Platform, ActivityIndicator, Dimensions } from 'react-native';
+import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
+import { ArrowLeft, UserPlus, Mail } from 'lucide-react-native';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { inviteService } from '../services/supabaseService';
@@ -7,19 +10,19 @@ import { handleError } from '../utils/errorHandler';
 import { RouteProp, useRoute, useNavigation } from '@react-navigation/native';
 import { RootStackParamList } from '../navigation/types';
 
+const { width, height } = Dimensions.get('window');
+
 type InviteScreenRouteProp = RouteProp<RootStackParamList, 'Invite'>;
 
 export const InviteScreen = () => {
   const navigation = useNavigation<any>();
   const { user, signOut, loading: authLoading } = useAuth();
   const route = useRoute<InviteScreenRouteProp>();
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const [pairEmail, setPairEmail] = useState('');
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    if (route.params?.token) { handleAcceptInvite(route.params.token); }
-  }, [route.params?.token]);
+  useEffect(() => { if (route.params?.token) { handleAcceptInvite(route.params.token); } }, [route.params?.token]);
 
   useEffect(() => {
     const handleDeepLink = (event: { url: string }) => {
@@ -59,38 +62,70 @@ export const InviteScreen = () => {
     finally { setLoading(false); }
   };
 
-  const handleLogout = async () => { await signOut(); };
+  const renderBackgroundGlows = () => (
+    <View style={styles.glowOverlay}>
+      <LinearGradient colors={['rgba(210, 118, 25, 0.2)', 'transparent'] as any} style={[styles.glowBall, { top: -50, left: -100, width: 400, height: 400 }]} />
+      <LinearGradient colors={['rgba(210, 118, 25, 0.1)', 'transparent'] as any} style={[styles.glowBall, { bottom: 100, right: -100, width: 350, height: 350 }]} />
+    </View>
+  );
 
   if (authLoading || loading) {
     return (
-      <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <View style={[styles.container, { backgroundColor: colors.background, justifyContent: 'center', alignItems: 'center' }]}>
         <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={[styles.subtitle, { marginTop: 20, color: colors.text }]}>Connecting...</Text>
       </View>
     );
   }
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <TouchableOpacity onPress={() => navigation.navigate('Home')} style={styles.backButton}><Text style={[styles.backIcon, { color: colors.primary }]}>←</Text></TouchableOpacity>
-      <Text style={[styles.title, { color: colors.primary }]}>New Connection</Text>
-      <Text style={[styles.subtitle, { color: colors.text }]}>Invite a partner to start a private chat.</Text>
-      <TextInput style={[styles.input, { backgroundColor: colors.white, borderColor: colors.lightGray, color: colors.text }]} placeholder="Enter partner's email" value={pairEmail} onChangeText={setPairEmail} autoCapitalize="none" keyboardType="email-address" placeholderTextColor={colors.gray} />
-      <TouchableOpacity style={[styles.button, { backgroundColor: colors.primary }]} onPress={sendInvite} disabled={loading}><Text style={styles.buttonText}>Send Chat Invite</Text></TouchableOpacity>
-      <TouchableOpacity onPress={handleLogout}><Text style={[styles.switchText, { color: colors.gray }]}>Not your time? <Text style={[styles.link, { color: colors.primary }]}>Logout</Text></Text></TouchableOpacity>
+      {renderBackgroundGlows()}
+      
+      <TouchableOpacity onPress={() => navigation.navigate('Home')} style={styles.backBtn}>
+        <ArrowLeft size={30} color={colors.text} strokeWidth={2.5} />
+      </TouchableOpacity>
+
+      <View style={styles.content}>
+        <BlurView intensity={colors.glassBlur} tint={isDark ? 'dark' : 'light'} style={[styles.iconBox, { borderColor: colors.glassBorder, borderWidth: colors.borderWidth, borderRadius: 28 }]}>
+          <UserPlus size={40} color={colors.primary} strokeWidth={2} />
+        </BlurView>
+        
+        <Text style={[styles.title, { color: colors.text }]}>New Chat</Text>
+        <Text style={[styles.subtitle, { color: colors.gray }]}>Invite your partner to start a private, secure conversation.</Text>
+        
+        <View style={[styles.inputGroup, { backgroundColor: colors.white, borderColor: colors.glassBorder, borderWidth: colors.borderWidth, borderRadius: colors.radius.card }]}>
+          <Mail size={20} color={colors.gray} style={{ marginRight: 15 }} />
+          <TextInput style={[styles.input, { color: colors.text }]} placeholder="Partner Email Address" value={pairEmail} onChangeText={setPairEmail} autoCapitalize="none" keyboardType="email-address" placeholderTextColor={colors.gray} />
+        </View>
+
+        <TouchableOpacity style={[styles.button, { borderRadius: colors.radius.card }]} onPress={sendInvite} disabled={loading}>
+          <LinearGradient colors={colors.gradientPrimary as any} style={styles.btnGrad}>
+            <Text style={styles.buttonText}>Send Invite</Text>
+          </LinearGradient>
+        </TouchableOpacity>
+
+        <TouchableOpacity onPress={() => signOut()} style={styles.signOutBtn}>
+          <Text style={[styles.signOutTxt, { color: colors.gray }]}>Logout Account</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: 'center', padding: 30 },
-  backButton: { position: 'absolute', top: 60, left: 20 },
-  backIcon: { fontSize: 30 },
-  title: { fontSize: 32, fontWeight: 'bold', textAlign: 'center', marginBottom: 10 },
-  subtitle: { fontSize: 16, textAlign: 'center', marginBottom: 40 },
-  input: { paddingVertical: 15, paddingHorizontal: 20, borderRadius: 25, marginBottom: 20, fontSize: 16, borderWidth: 1 },
-  button: { padding: 18, borderRadius: 25, alignItems: 'center', marginBottom: 25, ...Platform.select({ ios: { shadowColor: '#E91E63', shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.3, shadowRadius: 10 }, android: { elevation: 8 }, web: { boxShadow: '0px 5px 10px rgba(233, 30, 99, 0.3)' } }) },
+  container: { flex: 1, padding: 30 },
+  glowOverlay: { ...StyleSheet.absoluteFillObject, overflow: 'hidden' },
+  glowBall: { position: 'absolute', borderRadius: 200 },
+  backBtn: { position: 'absolute', top: 60, left: 20, zIndex: 10, width: 44, height: 44, justifyContent: 'center' },
+  content: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  iconBox: { width: 80, height: 80, justifyContent: 'center', alignItems: 'center', marginBottom: 25, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 10, elevation: 4, overflow: 'hidden' },
+  title: { fontSize: 34, fontWeight: '800', textAlign: 'center', marginBottom: 12 },
+  subtitle: { fontSize: 16, textAlign: 'center', marginBottom: 40, fontWeight: '600', paddingHorizontal: 15 },
+  inputGroup: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, height: 60, marginBottom: 20, width: '100%', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 6, elevation: 2 },
+  input: { flex: 1, fontSize: 16, fontWeight: '600' },
+  button: { width: '100%', height: 60, overflow: 'hidden', elevation: 8, shadowColor: '#D27619', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, marginTop: 10 },
+  btnGrad: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   buttonText: { color: '#FFFFFF', fontWeight: 'bold', fontSize: 18 },
-  switchText: { textAlign: 'center', fontSize: 14 },
-  link: { fontWeight: 'bold' }
+  signOutBtn: { marginTop: 35 },
+  signOutTxt: { fontSize: 14, fontWeight: '700' }
 });

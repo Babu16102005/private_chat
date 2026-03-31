@@ -1,5 +1,7 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, Platform } from 'react-native';
+import { BlurView } from 'expo-blur';
+import { Check, CheckCheck } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
 
 interface MessageBubbleProps {
@@ -9,84 +11,64 @@ interface MessageBubbleProps {
   delivered_at?: string | null;
   read_at?: string | null;
   onDelete?: () => void;
-  onReact?: (emoji: string) => void;
-  reactions?: { emoji: string; count: number; users: string[] }[];
-  showFullTimestamp?: boolean;
 }
 
-const EMOJI_REACTIONS = ['❤️', '😂', '😢', '👍', '😮'];
-
-export const MessageBubble: React.FC<MessageBubbleProps> = ({ content, isMe, timestamp, delivered_at, read_at, onDelete, onReact, reactions = [], showFullTimestamp = false }) => {
-  const { colors } = useTheme();
+export const MessageBubble: React.FC<MessageBubbleProps> = ({ content, isMe, timestamp, delivered_at, read_at, onDelete }) => {
+  const { colors, isDark } = useTheme();
 
   const renderTicks = () => {
     if (!isMe) return null;
-    if (read_at) return <Text style={[styles.ticks, { color: colors.tertiary }]}>✓✓</Text>;
-    if (delivered_at) return <Text style={styles.ticks}>✓✓</Text>;
-    return <Text style={styles.ticks}>✓</Text>;
+    const size = 14;
+    const color = read_at ? colors.tertiary : colors.gray;
+    return (read_at || delivered_at) 
+      ? <CheckCheck size={size} color={color} strokeWidth={3} /> 
+      : <Check size={size} color={color} strokeWidth={3} />;
   };
 
-  const formatFullTimestamp = (ts: string) => {
+  const formatTime = (ts: string) => {
     const date = new Date(ts);
-    return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
   };
 
-  const handleLongPress = () => {
-    if (!isMe && !onDelete) return;
-    const options = [
-      ...EMOJI_REACTIONS.map(emoji => ({ text: emoji, onPress: () => onReact?.(emoji) })),
-      ...(isMe && onDelete ? [{ text: 'Delete for me', style: 'destructive' as const, onPress: () => onDelete() }] : []),
-      { text: 'Cancel', style: 'cancel' as const }
-    ];
-    Alert.alert('Message Options', '', options);
-  };
-
-  const bubbleStyle = isMe 
-    ? [styles.bubble, styles.myBubble, { backgroundColor: colors.primary }]
-    : [styles.bubble, styles.theirBubble, { backgroundColor: colors.white }];
-
-  const textStyle = isMe ? [styles.text, styles.myText] : [styles.text, styles.theirText, { color: colors.text }];
-  const timeStyle = isMe ? [styles.time, styles.myTime] : [styles.time, styles.theirTime, { color: colors.gray }];
+  const Content = (
+    <View style={[
+      styles.bubble, 
+      isMe 
+        ? [styles.myBubble, { backgroundColor: colors.black }] // Solid Obsidian for outgoing
+        : [styles.theirBubble, { backgroundColor: 'transparent' }], // Glass for incoming
+      { borderRadius: colors.radius.bubble, borderBottomRightRadius: isMe ? 4 : colors.radius.bubble, borderBottomLeftRadius: !isMe ? 4 : colors.radius.bubble }
+    ]}>
+      <Text style={[styles.text, { color: '#FFF' }]}>{content}</Text>
+      <View style={styles.metaRow}>
+        <Text style={[styles.time, { color: 'rgba(255,255,255,0.6)' }]}>{formatTime(timestamp)}</Text>
+        <View style={styles.tickSpace}>{renderTicks()}</View>
+      </View>
+    </View>
+  );
 
   return (
-    <TouchableOpacity onLongPress={handleLongPress} activeOpacity={0.8}>
-      <View style={bubbleStyle}>
-        <Text style={textStyle}>{content}</Text>
-        <View style={styles.timeContainer}>
-          <Text style={timeStyle}>
-            {showFullTimestamp ? formatFullTimestamp(timestamp) : new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-          </Text>
-          {renderTicks()}
-        </View>
-        {reactions.length > 0 && (
-          <View style={styles.reactionsContainer}>
-            {reactions.map((r, i) => (
-              <View key={i} style={[styles.reactionBadge, { backgroundColor: colors.lightGray }]}>
-                <Text style={styles.reactionEmoji}>{r.emoji}</Text>
-                <Text style={[styles.reactionCount, { color: colors.gray }]}>{r.count}</Text>
-              </View>
-            ))}
-          </View>
-        )}
-      </View>
+    <TouchableOpacity 
+      onLongPress={() => isMe && onDelete && Alert.alert('Delete', 'Delete this message?', [{ text: 'Cancel', style: 'cancel' }, { text: 'Delete', onPress: onDelete, style: 'destructive' }])} 
+      activeOpacity={0.9} 
+      style={[styles.container, { alignSelf: isMe ? 'flex-end' : 'flex-start' }]}
+    >
+      {!isMe ? (
+        <BlurView intensity={colors.glassBlur} tint={isDark ? 'dark' : 'light'} style={[styles.glassWrap, { borderRadius: colors.radius.bubble, borderBottomLeftRadius: 4, borderColor: colors.glassBorder, borderWidth: colors.borderWidth }]}>
+          {Content}
+        </BlurView>
+      ) : Content}
     </TouchableOpacity>
   );
 };
 
 const styles = StyleSheet.create({
-  bubble: { paddingVertical: 10, paddingHorizontal: 15, borderRadius: 20, maxWidth: '80%', marginBottom: 8 },
-  myBubble: { alignSelf: 'flex-end', borderBottomRightRadius: 5 },
-  theirBubble: { alignSelf: 'flex-start', borderBottomLeftRadius: 5 },
-  text: { fontSize: 16 },
-  myText: { color: '#FFFFFF' },
-  theirText: { color: '#333333' },
-  timeContainer: { flexDirection: 'row', alignItems: 'center', marginTop: 8, alignSelf: 'flex-end' },
-  time: { fontSize: 11, marginRight: 5 },
-  myTime: { color: '#F0F0F0' },
-  theirTime: { color: '#888888' },
-  ticks: { fontSize: 12, color: '#F0F0F0' },
-  reactionsContainer: { flexDirection: 'row', marginTop: 5, gap: 5 },
-  reactionBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 12 },
-  reactionEmoji: { fontSize: 14, marginRight: 3 },
-  reactionCount: { fontSize: 12 }
+  container: { maxWidth: '82%', marginBottom: 10 },
+  glassWrap: { overflow: 'hidden' },
+  bubble: { paddingVertical: 12, paddingHorizontal: 16 },
+  myBubble: { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 4 },
+  theirBubble: {},
+  text: { fontSize: 15, lineHeight: 22, fontWeight: '500' },
+  metaRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', marginTop: 4 },
+  time: { fontSize: 10, fontWeight: '700' },
+  tickSpace: { marginLeft: 4 }
 });

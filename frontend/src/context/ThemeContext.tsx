@@ -1,18 +1,67 @@
-import { createContext, useState, useContext, useEffect, useMemo } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import { useColorScheme, StyleSheet } from 'react-native';
 
 type ThemeMode = 'light' | 'dark';
 
-interface ThemeColors {
+export interface ThemeColors {
   primary: string;
   secondary: string;
-  tertiary: string;
+  tertiary: string; // Amber accent
   background: string;
-  text: string;
   white: string;
-  lightGray: string;
+  black: string;
   gray: string;
+  lightGray: string;
+  text: string;
+  gradientPrimary: readonly [string, string, ...string[]]; // Mesh/Amber
+  gradientSecondary: readonly [string, string, ...string[]];
+  glassBorder: string;
+  borderWidth: number;
+  glassOpacity: number;
+  glassBlur: number;
+  radius: {
+    pill: number;
+    panel: number;
+    card: number;
+    bubble: number;
+    story: number;
+  };
 }
+
+const darkColors: ThemeColors = {
+  primary: '#D27619', // Deep Amber
+  secondary: '#FF3B30', // Alert Red
+  tertiary: '#FFA500', // Bright Amber
+  background: '#000000',
+  white: 'rgba(255, 255, 255, 0.08)',
+  black: '#1A120B', // Deep Brown
+  gray: '#A1A1A1',
+  lightGray: 'rgba(255, 255, 255, 0.05)',
+  text: '#FFFFFF',
+  gradientPrimary: ['#1A120B', '#2D1E12', '#000000'], // Mesh theme
+  gradientSecondary: ['#FF3B30', '#D27619'],
+  glassBorder: 'rgba(255, 255, 255, 0.12)',
+  borderWidth: StyleSheet.hairlineWidth,
+  glassOpacity: 0.1,
+  glassBlur: 30, // High intensity glass
+  radius: {
+    pill: 999,
+    panel: 40,
+    card: 32,
+    bubble: 20,
+    story: 16 // Rounded squares
+  }
+};
+
+const lightColors: ThemeColors = {
+  ...darkColors,
+  background: '#FDF7F2',
+  white: 'rgba(255, 255, 255, 0.7)',
+  black: '#2D1E12',
+  text: '#1A120B',
+  glassBorder: 'rgba(0,0,0,0.05)',
+  glassOpacity: 0.2
+};
 
 interface ThemeContextType {
   isDark: boolean;
@@ -20,60 +69,22 @@ interface ThemeContextType {
   colors: ThemeColors;
 }
 
-const lightColors: ThemeColors = {
-  primary: '#E91E63',
-  secondary: '#F48FB1',
-  tertiary: '#4FC3F7',
-  background: '#FCE4EC',
-  text: '#4E342E',
-  white: '#FFFFFF',
-  lightGray: '#F5F5F5',
-  gray: '#BDBDBD'
-};
-
-const darkColors: ThemeColors = {
-  primary: '#EC407A',
-  secondary: '#F48FB1',
-  tertiary: '#4FC3F7',
-  background: '#1E1E1E',
-  text: '#FFFFFF',
-  white: '#2D2D2D',
-  lightGray: '#3D3D3D',
-  gray: '#9E9E9E'
-};
-
 const ThemeContext = createContext<ThemeContextType>({
-  isDark: false,
+  isDark: true,
   toggleTheme: () => {},
-  colors: lightColors
+  colors: darkColors,
 });
 
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [isDark, setIsDark] = useState(false);
+  const systemScheme = useColorScheme();
+  const [isDark, setIsDark] = useState(true);
 
   useEffect(() => {
-    loadThemePreference();
-  }, []);
+    setIsDark(systemScheme === 'dark');
+  }, [systemScheme]);
 
-  const loadThemePreference = async () => {
-    try {
-      const saved = await AsyncStorage.getItem('theme_mode');
-      if (saved === 'dark') setIsDark(true);
-      else if (saved === 'light') setIsDark(false);
-      else {
-        const prefersDark = window.matchMedia?.('(prefers-color-scheme: dark)').matches;
-        setIsDark(prefersDark ?? false);
-      }
-    } catch (e) {}
-  };
-
-  const toggleTheme = () => {
-    const newMode = !isDark;
-    setIsDark(newMode);
-    AsyncStorage.setItem('theme_mode', newMode ? 'dark' : 'light');
-  };
-
-  const colors = useMemo(() => isDark ? darkColors : lightColors, [isDark]);
+  const toggleTheme = () => setIsDark(!isDark);
+  const colors = isDark ? darkColors : lightColors;
 
   return (
     <ThemeContext.Provider value={{ isDark, toggleTheme, colors }}>
@@ -83,4 +94,3 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 };
 
 export const useTheme = () => useContext(ThemeContext);
-export { lightColors, darkColors };

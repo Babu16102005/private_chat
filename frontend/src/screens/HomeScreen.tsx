@@ -1,238 +1,227 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, SafeAreaView, Image, ActivityIndicator, RefreshControl, Platform, Alert, TextInput } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, TextInput, ScrollView, Platform, SafeAreaView, Dimensions, Alert, ActivityIndicator } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Settings, Sun, Moon, Search, Plus, MessageCircle, MoreHorizontal, LayoutGrid, Heart, Briefcase } from 'lucide-react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '../context/AuthContext';
+import { inviteService, messageService } from '../services/supabaseService';
+import { supabase } from '../services/supabase';
 import { useTheme } from '../context/ThemeContext';
-import { inviteService } from '../services/supabaseService';
-import { handleError } from '../utils/errorHandler';
+import { BlurView } from 'expo-blur';
+
+const { width, height } = Dimensions.get('window');
 
 export const HomeScreen = ({ navigation }: any) => {
   const { user } = useAuth();
-  const { isDark, toggleTheme, colors } = useTheme();
-  const [pairs, setPairs] = useState<any[]>([]);
-  const [filteredPairs, setFilteredPairs] = useState<any[]>([]);
-  const [pendingInvites, setPendingInvites] = useState<any[]>([]);
+  const { colors, isDark, toggleTheme } = useTheme();
+  const insets = useSafeAreaInsets();
+  const [chats, setChats] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState('');
+  const [onlineStatus, setOnlineStatus] = useState<Record<string, boolean>>({});
 
-  const fetchData = useCallback(async () => {
-    if (!user) return;
-    try {
-      const [pairsData, invitesData] = await Promise.all([
-        inviteService.getMyPairs(),
-        inviteService.getPendingInvites()
-      ]);
-      setPairs(pairsData);
-      setFilteredPairs(pairsData);
-      setPendingInvites(invitesData);
-    } catch (error) {
-      console.error(error);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
+  useEffect(() => {
+    if (user?.id) {
+      fetchChats();
     }
   }, [user]);
 
   useEffect(() => {
-    fetchData();
-    const unsubscribe = navigation.addListener('focus', fetchData);
-    const subscription = inviteService.subscribeToInvites((newInvite) => {
-      if (newInvite.invitee_email === user?.email?.toLowerCase().trim()) {
-        fetchData();
-      }
+    if (chats.length === 0 || !user?.id) return;
+
+    const channels = chats.map(chat => {
+      return messageService.subscribeToPresence(chat.id, user.id, (isOnline: boolean) => {
+        setOnlineStatus(prev => ({ ...prev, [chat.id]: isOnline }));
+      });
     });
+
     return () => {
-      unsubscribe();
-      subscription.unsubscribe();
+      channels.forEach(ch => supabase.removeChannel(ch));
     };
-  }, [fetchData, navigation, user]);
+  }, [chats]);
 
-  useEffect(() => {
-    if (search.trim() === '') {
-      setFilteredPairs(pairs);
-    } else {
-      const lowerSearch = search.toLowerCase();
-      setFilteredPairs(pairs.filter(p => {
-        const partner = p.user_a?.id === user?.id ? p.user_b : p.user_a;
-        return (partner?.name || partner?.email || '').toLowerCase().includes(lowerSearch);
-      }));
-    }
-  }, [search, pairs, user]);
-
-  const onRefresh = () => {
-    setRefreshing(true);
-    fetchData();
-  };
-
-  const handleAcceptInvite = async (token: string) => {
-    setLoading(true);
+  const fetchChats = async () => {
     try {
-      const pair = await inviteService.acceptInvite(token);
-      if (pair) {
-        Alert.alert('Success', 'Profile linked! Start chatting now.');
-        const partner = pair.user_a?.id === user?.id ? pair.user_b : pair.user_a;
-        navigation.navigate('Chat', { pairId: pair.id, partner });
-      }
-      fetchData();
-    } catch (error) {
-      handleError(error, 'Accept failed');
-    } finally {
-      setLoading(false);
-    }
+      const data = await inviteService.getMyPairs();
+      setChats(data || []);
+    } catch (error) { console.error('Fetch chats fail:', error); }
+    finally { setLoading(false); }
   };
 
-  const renderInviteItem = ({ item }: { item: any }) => (
-    <View style={[styles.inviteCard, { backgroundColor: colors.white, borderColor: colors.primary }]}>
-      <View style={{ flex: 1 }}>
-        <Text style={[styles.inviteName, { color: colors.primary }]}>{item.inviter?.name || 'Someone'}</Text>
-        <Text style={[styles.inviteEmail, { color: colors.text }]}>{item.inviter?.email || 'No email'}</Text>
-      </View>
-      <TouchableOpacity style={[styles.acceptButton, { backgroundColor: colors.primary }]} onPress={() => handleAcceptInvite(item.token)}>
-        <Text style={styles.acceptButtonText}>Accept</Text>
-      </TouchableOpacity>
+  const filteredChats = chats.filter(chat => {
+    const partner = chat.user_a?.id === user!.id ? chat.user_b : chat.user_a;
+    return partner?.name?.toLowerCase().includes(search.toLowerCase());
+  });
+
+  const renderBackgroundGlows = () => (
+    <View style={styles.glowOverlay}>
+      <LinearGradient colors={['rgba(210, 118, 25, 0.2)', 'transparent'] as any} style={[styles.glowBall, { top: -100, right: -50, width: 350, height: 350 }]} />
+      <LinearGradient colors={['rgba(210, 118, 25, 0.1)', 'transparent'] as any} style={[styles.glowBall, { bottom: height * 0.2, left: -100, width: 300, height: 300 }]} />
     </View>
   );
 
-  const renderChatItem = ({ item }: { item: any }) => {
-    const partner = item.user_a?.id === user?.id ? item.user_b : item.user_a;
-    if (!partner) return null;
-    const lastMsg = item.last_message;
-    const time = lastMsg ? new Date(lastMsg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
-
+  const renderStoryItem = (partner: any, isAdd: boolean = false) => {
+    const isOnline = partner?.id && onlineStatus[partner.pairId];
     return (
-      <TouchableOpacity
-        style={[styles.chatItem, { borderBottomColor: colors.lightGray }]}
-        onPress={() => navigation.navigate('Chat', {
-          pairId: item.id,
-          partnerId: partner?.id,
-          partnerName: partner?.name || partner?.email || 'Partner',
-          partnerAvatar: partner?.avatar_url
-        })}
+      <TouchableOpacity 
+        style={styles.storyCard}
+        onPress={() => isAdd ? navigation.navigate('Invite') : navigation.navigate('Chat', { pairId: partner.pairId, partner })}
       >
-        <View style={styles.avatarContainer}>
-          {partner?.avatar_url ? (
-            <Image source={{ uri: partner.avatar_url }} style={styles.avatar} />
+        <View style={[styles.storyAvatarWrap, { borderRadius: colors.radius.story, backgroundColor: colors.white, borderColor: colors.glassBorder, borderWidth: colors.borderWidth }]}>
+          {isAdd ? (
+            <Plus size={24} color={colors.primary} strokeWidth={2.5} />
           ) : (
-            <View style={[styles.avatarPlaceholder, { backgroundColor: colors.secondary }]}>
-              <Text style={[styles.avatarInitial, { color: colors.white }]}>{(partner?.name || partner?.email || '?')[0].toUpperCase()}</Text>
-            </View>
+            <Image source={{ uri: `https://api.dicebear.com/7.x/avataaars/svg?seed=${partner?.name || 'User'}` }} style={styles.storyImg} />
           )}
+          {isOnline && <View style={[styles.storyBadge, { backgroundColor: colors.tertiary, borderColor: colors.black }]} />}
         </View>
-        <View style={styles.chatInfo}>
-          <View style={styles.chatHeader}>
-            <Text style={[styles.partnerName, { color: colors.text }]} numberOfLines={1}>{partner?.name || partner?.email || 'Unknown'}</Text>
-            <Text style={[styles.timeText, { color: colors.gray }]}>{time}</Text>
-          </View>
-          <Text style={[styles.lastMessage, { color: colors.gray }]} numberOfLines={1}>
-            {lastMsg ? (lastMsg.message_type === 'text' ? lastMsg.content : '📸 Media') : 'No messages yet'}
-          </Text>
-        </View>
+        <Text style={[styles.storyLabel, { color: colors.text }]} numberOfLines={1}>
+          {isAdd ? 'You' : (partner?.name?.split(' ')[0] || 'User')}
+        </Text>
       </TouchableOpacity>
     );
   };
 
-  const ListHeader = () => (
-    <View>
-      <View style={styles.searchContainer}>
-        <TextInput
-          style={[styles.searchInput, { backgroundColor: colors.lightGray, color: colors.text }]}
-          placeholder="Search chats..."
-          placeholderTextColor={colors.gray}
-          value={search}
-          onChangeText={setSearch}
-        />
-      </View>
-      {pendingInvites.length > 0 && (
-        <View>
-          <Text style={[styles.sectionHeader, { color: colors.gray }]}>Pending Invites</Text>
-          <FlatList
-            data={pendingInvites}
-            keyExtractor={item => item.id}
-            renderItem={renderInviteItem}
-            scrollEnabled={false}
-          />
-          <Text style={[styles.sectionHeader, { color: colors.gray }]}>Chats</Text>
-        </View>
-      )}
-    </View>
-  );
 
-  if (loading && !refreshing) {
+  const renderChatItem = ({ item }: { item: any }) => {
+    const partner = item.user_a?.id === user!.id ? item.user_b : item.user_a;
+    const isOnline = onlineStatus[item.id];
     return (
-      <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
+      <TouchableOpacity 
+        style={[styles.chatRow, { borderBottomColor: colors.glassBorder, borderBottomWidth: StyleSheet.hairlineWidth }]} 
+        onPress={() => navigation.navigate('Chat', { pairId: item.id, partner })}
+      >
+        <View style={styles.chatThumbWrap}>
+          <Image source={{ uri: `https://api.dicebear.com/7.x/avataaars/svg?seed=${partner?.name || 'User'}` }} style={styles.chatThumb} />
+          {isOnline && <View style={[styles.onlineIndicator, { backgroundColor: colors.tertiary, borderColor: colors.black }]} />}
+        </View>
+        <View style={styles.chatMain}>
+          <View style={styles.chatTopLine}>
+            <Text style={[styles.chatPartnerName, { color: colors.text }]}>{partner?.name || 'Partner'}</Text>
+            <Text style={[styles.chatTimestamp, { color: colors.gray }]}>24 mins</Text>
+          </View>
+          <Text style={[styles.chatSnippet, { color: colors.gray }]} numberOfLines={1}>
+            {item.last_message?.content || 'No messages yet'}
+          </Text>
+        </View>
+        {item.unread_count > 0 && (
+          <View style={[styles.unreadCount, { backgroundColor: colors.tertiary }]}>
+            <Text style={styles.unreadCountText}>{item.unread_count}</Text>
+          </View>
+        )}
+      </TouchableOpacity>
+    );
+  };
+
+  if (loading) {
+    return (
+      <View style={[styles.container, { backgroundColor: colors.background, justifyContent: 'center', alignItems: 'center' }]}>
         <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      <View style={[styles.topBar, { backgroundColor: colors.white, borderBottomColor: colors.lightGray }]}>
-        <Text style={[styles.appTitle, { color: colors.primary }]}>PrivateChat</Text>
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <TouchableOpacity onPress={toggleTheme}>
-            <Text style={styles.themeIcon}>{isDark ? '☀️' : '🌙'}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => navigation.navigate('Profile')}>
-            <Text style={styles.settingsIcon}>⚙️</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      <FlatList
-        data={filteredPairs}
-        keyExtractor={(item) => item.id}
-        renderItem={renderChatItem}
-        ListHeaderComponent={ListHeader}
-        contentContainerStyle={styles.listContent}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Text style={[styles.emptyText, { color: colors.gray }]}>No chats found.</Text>
-            <TouchableOpacity style={[styles.newChatButton, { backgroundColor: colors.primary }]} onPress={() => navigation.navigate('Invite')}>
-              <Text style={styles.newChatButtonText}>Start a New Chat</Text>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      {renderBackgroundGlows()}
+      
+      <SafeAreaView style={styles.safe}>
+        <View style={styles.header}>
+          <Text style={[styles.headerTitle, { color: colors.text }]}>Chats</Text>
+          <View style={styles.headerRight}>
+            <TouchableOpacity onPress={() => Alert.alert('Menu', 'Opening settings...')} style={styles.headerAction}><MoreHorizontal size={24} color={colors.text} /></TouchableOpacity>
+            <TouchableOpacity onPress={() => navigation.navigate('Profile')} style={[styles.headerAvatarMini, { borderColor: colors.glassBorder, borderWidth: colors.borderWidth }]}>
+              <Image source={{ uri: `https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.email || 'User'}` }} style={{ width: '100%', height: '100%' }} />
             </TouchableOpacity>
           </View>
-        }
-      />
+        </View>
 
-      <TouchableOpacity style={[styles.fab, { backgroundColor: colors.primary }]} onPress={() => navigation.navigate('Invite')}>
-        <Text style={styles.fabText}>+</Text>
+        <View style={styles.searchWrapper}>
+          <BlurView intensity={colors.glassBlur} tint={isDark ? 'dark' : 'light'} style={[styles.searchPill, { borderColor: colors.glassBorder, borderWidth: colors.borderWidth }]}>
+            <Search size={20} color={colors.gray} style={{ marginRight: 10 }} />
+            <TextInput
+              style={[styles.searchInput, { color: colors.text }]}
+              placeholder="Search conversations..."
+              placeholderTextColor={colors.gray}
+              value={search}
+              onChangeText={setSearch}
+            />
+          </BlurView>
+        </View>
+
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollInside}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.storySection} contentContainerStyle={styles.storyContent}>
+            {renderStoryItem(null, true)}
+            {chats.map(chat => {
+              const partner = chat.user_a?.id === user!.id ? chat.user_b : chat.user_a;
+              return renderStoryItem({ ...partner, pairId: chat.id }, false);
+            })}
+          </ScrollView>
+
+          <BlurView intensity={colors.glassBlur} tint={isDark ? 'dark' : 'light'} style={[styles.glassListContainer, { borderColor: colors.glassBorder, borderWidth: colors.borderWidth, borderRadius: colors.radius.panel }]}>
+            <FlatList
+              data={filteredChats}
+              keyExtractor={(item) => item.id}
+              renderItem={renderChatItem}
+              scrollEnabled={false}
+              ListEmptyComponent={
+                <View style={styles.emptyWrap}>
+                  <MessageCircle size={40} color={colors.lightGray} strokeWidth={1.5} />
+                  <Text style={[styles.emptyLabel, { color: colors.gray }]}>No conversations found</Text>
+                </View>
+              }
+            />
+          </BlurView>
+        </ScrollView>
+      </SafeAreaView>
+
+      <TouchableOpacity 
+        style={[styles.floatPlus, { bottom: Math.max(insets.bottom + 15, 30) }]} 
+        onPress={() => navigation.navigate('Invite')}
+      >
+        <LinearGradient colors={colors.gradientSecondary as any} style={styles.floatGrad}>
+          <Plus size={30} color="white" />
+        </LinearGradient>
       </TouchableOpacity>
-    </SafeAreaView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  topBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 15, borderBottomWidth: 1, paddingTop: Platform.OS === 'android' ? 40 : 10 },
-  appTitle: { fontSize: 24, fontWeight: 'bold' },
-  settingsIcon: { fontSize: 22 },
-  themeIcon: { fontSize: 22, marginRight: 15 },
-  searchContainer: { padding: 15 },
-  searchInput: { borderRadius: 10, padding: 12, fontSize: 16 },
-  sectionHeader: { paddingHorizontal: 15, paddingVertical: 8, fontSize: 14, fontWeight: 'bold', textTransform: 'uppercase' },
-  inviteCard: { marginHorizontal: 15, marginVertical: 5, padding: 15, borderRadius: 12, flexDirection: 'row', alignItems: 'center', borderWidth: 1 },
-  inviteName: { fontWeight: 'bold', fontSize: 16 },
-  inviteEmail: { fontSize: 12, opacity: 0.7 },
-  acceptButton: { paddingHorizontal: 15, paddingVertical: 8, borderRadius: 20 },
-  acceptButtonText: { color: 'white', fontWeight: 'bold' },
-  chatItem: { flexDirection: 'row', padding: 15, alignItems: 'center', borderBottomWidth: 1 },
-  avatarContainer: { marginRight: 15 },
-  avatar: { width: 55, height: 55, borderRadius: 27.5 },
-  avatarPlaceholder: { width: 55, height: 55, borderRadius: 27.5, justifyContent: 'center', alignItems: 'center' },
-  avatarInitial: { fontSize: 22, fontWeight: 'bold' },
-  chatInfo: { flex: 1 },
-  chatHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 5 },
-  partnerName: { fontSize: 17, fontWeight: 'bold' },
-  timeText: { fontSize: 12 },
-  lastMessage: { fontSize: 14 },
-  listContent: { paddingBottom: 100 },
-  emptyContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', marginTop: 100 },
-  emptyText: { fontSize: 16, marginBottom: 20 },
-  newChatButton: { paddingVertical: 12, paddingHorizontal: 25, borderRadius: 25 },
-  newChatButtonText: { color: 'white', fontWeight: 'bold' },
-  fab: { position: 'absolute', bottom: 30, right: 30, width: 60, height: 60, borderRadius: 30, justifyContent: 'center', alignItems: 'center', elevation: 8 },
-  fabText: { color: 'white', fontSize: 35, marginTop: -3 }
+  safe: { flex: 1 },
+  glowOverlay: { ...StyleSheet.absoluteFillObject, overflow: 'hidden' },
+  glowBall: { position: 'absolute', borderRadius: 200 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 25, paddingTop: 20, paddingBottom: 25 },
+  headerTitle: { fontSize: 32, fontWeight: '800' },
+  headerRight: { flexDirection: 'row', gap: 15, alignItems: 'center' },
+  headerAction: { opacity: 0.8 },
+  headerAvatarMini: { width: 40, height: 40, borderRadius: 12, overflow: 'hidden' },
+  searchWrapper: { paddingHorizontal: 25, marginBottom: 25 },
+  searchPill: { height: 50, borderRadius: 25, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 15, overflow: 'hidden' },
+  searchInput: { flex: 1, fontSize: 15, fontWeight: '600' },
+  scrollInside: { paddingBottom: 100 },
+  storySection: { marginBottom: 30 },
+  storyContent: { gap: 18, paddingHorizontal: 25 },
+  storyCard: { alignItems: 'center', gap: 10 },
+  storyAvatarWrap: { width: 68, height: 68, justifyContent: 'center', alignItems: 'center', position: 'relative', overflow: 'hidden' },
+  storyImg: { width: '100%', height: '100%' },
+  storyBadge: { position: 'absolute', bottom: 6, right: 6, width: 14, height: 14, borderRadius: 7, borderWidth: 2 },
+  storyLabel: { fontSize: 13, fontWeight: '700', opacity: 0.8 },
+  glassListContainer: { marginHorizontal: 20, paddingHorizontal: 10, marginBottom: 40, overflow: 'hidden' },
+  chatRow: { flexDirection: 'row', padding: 18, alignItems: 'center' },
+  chatThumbWrap: { position: 'relative' },
+  chatThumb: { width: 58, height: 58, borderRadius: 20 },
+  onlineIndicator: { position: 'absolute', bottom: 0, right: 0, width: 14, height: 14, borderRadius: 7, borderWidth: 2 },
+  chatMain: { flex: 1, marginLeft: 16 },
+  chatTopLine: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
+  chatPartnerName: { fontSize: 17, fontWeight: '800' },
+  chatTimestamp: { fontSize: 12, fontWeight: '600' },
+  chatSnippet: { fontSize: 14, fontWeight: '500', opacity: 0.8 },
+  unreadCount: { width: 22, height: 22, borderRadius: 11, justifyContent: 'center', alignItems: 'center', marginLeft: 10 },
+  unreadCountText: { color: 'white', fontSize: 11, fontWeight: '800' },
+  emptyWrap: { height: 300, justifyContent: 'center', alignItems: 'center', gap: 12 },
+  emptyLabel: { fontSize: 15, fontWeight: '600' },
+  floatPlus: { position: 'absolute', bottom: 30, right: 25, width: 64, height: 64, borderRadius: 32, shadowColor: '#D27619', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.4, shadowRadius: 12, elevation: 10 },
+  floatGrad: { flex: 1, borderRadius: 32, justifyContent: 'center', alignItems: 'center' }
 });

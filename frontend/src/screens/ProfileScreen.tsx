@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Platform } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Platform, KeyboardAvoidingView, ScrollView } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { User, Lock, Moon, Sun, LogOut, ChevronRight, ChevronLeft, Save, ShieldCheck } from 'lucide-react-native';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { profileService } from '../services/supabaseService';
@@ -48,40 +50,92 @@ export const ProfileScreen = ({ navigation }: any) => {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <Text style={[styles.title, { color: colors.primary }]}>Your Profile</Text>
-      <Text style={[styles.label, { color: colors.gray }]}>Display Name</Text>
-      <TextInput style={[styles.input, { backgroundColor: colors.white, borderColor: colors.lightGray, color: colors.text }]} placeholder="Display Name" value={name} onChangeText={setName} placeholderTextColor={colors.gray} />
-      <TouchableOpacity style={[styles.button, { backgroundColor: colors.primary }]} onPress={updateProfile} disabled={loading}><Text style={styles.buttonText}>Save Changes</Text></TouchableOpacity>
+      <View style={styles.headerArea}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+          <ChevronLeft size={32} color={colors.text} />
+        </TouchableOpacity>
+        <Text style={[styles.title, { color: colors.text }]}>Settings</Text>
+      </View>
 
-      <View style={[styles.divider, { backgroundColor: colors.lightGray }]} />
+      <ScrollView contentContainerStyle={styles.scrollArea} showsVerticalScrollIndicator={false}>
+        <View style={styles.section}>
+          <Text style={[styles.sectionLabel, { color: colors.gray }]}>Profile Information</Text>
+          <View style={[styles.card, { backgroundColor: colors.white, borderColor: colors.glassBorder, borderWidth: colors.borderWidth, borderRadius: colors.radius.card }]}>
+            <View style={styles.inputFieldRow}>
+              <User size={20} color={colors.gray} />
+              <TextInput style={[styles.input, { color: colors.text }]} placeholder="Full Name" value={name} onChangeText={setName} placeholderTextColor={colors.gray} />
+            </View>
+            <TouchableOpacity style={[styles.saveBtn, { borderRadius: 16 }]} onPress={updateProfile} disabled={loading}>
+              <LinearGradient colors={colors.gradientPrimary as any} style={styles.btnGrad}>
+                <Save size={18} color="white" style={{ marginRight: 8 }} />
+                <Text style={styles.btnTxt}>Save Changes</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+        </View>
 
-      <Text style={[styles.label, { color: colors.gray }]}>Dark Mode</Text>
-      <TouchableOpacity style={[styles.button, { backgroundColor: isDark ? '#4CAF50' : colors.gray }]} onPress={toggleTheme}>
-        <Text style={styles.buttonText}>{isDark ? '🌙 Dark Mode On' : '☀️ Switch to Dark'}</Text>
-      </TouchableOpacity>
+        <View style={styles.section}>
+          <Text style={[styles.sectionLabel, { color: colors.gray }]}>App Experience</Text>
+          <TouchableOpacity 
+            style={[styles.card, { backgroundColor: colors.white, borderColor: colors.glassBorder, borderWidth: colors.borderWidth, borderRadius: colors.radius.card, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]} 
+            onPress={toggleTheme}
+          >
+            <View style={styles.menuItemLeft}>
+              <View style={[styles.iconBox, { backgroundColor: isDark ? 'rgba(168, 85, 247, 0.1)' : 'rgba(124, 58, 237, 0.05)' }]}>
+                {isDark ? <Moon size={20} color={colors.primary} /> : <Sun size={20} color={colors.primary} />}
+              </View>
+              <Text style={[styles.themeLabel, { color: colors.text }]}>{isDark ? 'Dark Mode' : 'Light Mode'}</Text>
+            </View>
+            <View style={[styles.toggleBackground, { backgroundColor: isDark ? colors.primary : colors.lightGray }]}>
+              <View style={[styles.toggleCircle, { transform: [{ translateX: isDark ? 20 : 0 }] }]} />
+            </View>
+          </TouchableOpacity>
+        </View>
 
-      <View style={[styles.divider, { backgroundColor: colors.lightGray }]} />
-
-      <Text style={[styles.label, { color: colors.gray }]}>Change Password</Text>
-      <TextInput style={[styles.input, { backgroundColor: colors.white, borderColor: colors.lightGray, color: colors.text }]} placeholder="New Password" value={newPassword} onChangeText={setNewPassword} secureTextEntry placeholderTextColor={colors.gray} />
-      <TouchableOpacity style={[styles.button, { backgroundColor: colors.secondary }]} onPress={handleChangePassword} disabled={loading}><Text style={styles.buttonText}>Update Password</Text></TouchableOpacity>
-      
-      <TouchableOpacity style={[styles.button, { backgroundColor: colors.text, marginTop: 10 }]} onPress={handleLogout}><Text style={styles.buttonText}>Logout</Text></TouchableOpacity>
-
-      <TouchableOpacity onPress={() => navigation.goBack()} style={{ marginTop: 20 }}><Text style={[styles.switchText, { color: colors.primary }]}>Back to Chat</Text></TouchableOpacity>
+        <View style={styles.section}>
+          <Text style={[styles.sectionLabel, { color: colors.gray }]}>Privacy & Security</Text>
+          <View style={[styles.card, { backgroundColor: colors.white, borderColor: colors.glassBorder, borderWidth: colors.borderWidth, borderRadius: colors.radius.card }]}>
+            <View style={styles.inputFieldRow}>
+              <ShieldCheck size={20} color={colors.gray} />
+              <TextInput style={[styles.input, { color: colors.text }]} placeholder="New Password" value={newPassword} onChangeText={setNewPassword} secureTextEntry placeholderTextColor={colors.gray} />
+            </View>
+            <TouchableOpacity style={[styles.saveBtn, { borderRadius: 16 }]} onPress={handleChangePassword} disabled={loading}>
+              <LinearGradient colors={colors.gradientSecondary as any} style={styles.btnGrad}>
+                <Lock size={18} color="white" style={{ marginRight: 8 }} />
+                <Text style={styles.btnTxt}>Update Password</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+        </View>
+        
+        <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
+          <LogOut size={20} color="#FF4B4B" style={{ marginRight: 10 }} />
+          <Text style={[styles.logoutTxt, { color: '#FF4B4B' }]}>Logout Account</Text>
+        </TouchableOpacity>
+      </ScrollView>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: 'center', padding: 30 },
-  title: { fontSize: 32, fontWeight: 'bold', textAlign: 'center', marginBottom: 40 },
-  input: { padding: 15, borderRadius: 25, marginBottom: 15, borderWidth: 1, fontSize: 16 },
-  button: { padding: 18, borderRadius: 25, alignItems: 'center', marginBottom: 15, ...Platform.select({ ios: { shadowColor: '#E91E63', shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.3, shadowRadius: 10 }, android: { elevation: 8 }, web: { boxShadow: '0px 5px 10px rgba(233, 30, 99, 0.3)' } }) },
-  logoutButton: { marginTop: 10 },
-  passwordButton: { marginBottom: 10 },
-  label: { fontSize: 14, fontWeight: 'bold', marginBottom: 8, marginLeft: 10 },
-  divider: { height: 1, marginVertical: 20 },
-  buttonText: { color: '#FFFFFF', fontWeight: 'bold', fontSize: 16 },
-  switchText: { textAlign: 'center', fontWeight: 'bold' }
+  container: { flex: 1 },
+  headerArea: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingTop: Platform.OS === 'android' ? 50 : 20, paddingBottom: 10 },
+  backBtn: { width: 44, height: 44, justifyContent: 'center', alignItems: 'center', marginLeft: -10 },
+  title: { fontSize: 24, fontWeight: '800', marginLeft: 5 },
+  scrollArea: { paddingHorizontal: 25, paddingVertical: 20 },
+  section: { marginBottom: 30 },
+  sectionLabel: { fontSize: 13, fontWeight: '700', textTransform: 'uppercase', marginBottom: 12, marginLeft: 5 },
+  card: { padding: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 2 },
+  inputFieldRow: { flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: 'rgba(0,0,0,0.05)', marginBottom: 20, paddingBottom: 5 },
+  input: { flex: 1, fontSize: 16, fontWeight: '600', paddingVertical: 10, marginLeft: 15 },
+  saveBtn: { height: 50, overflow: 'hidden' },
+  btnGrad: { flex: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'center' },
+  btnTxt: { color: 'white', fontWeight: 'bold' },
+  menuItemLeft: { flexDirection: 'row', alignItems: 'center' },
+  iconBox: { width: 40, height: 40, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginRight: 15 },
+  themeLabel: { fontSize: 16, fontWeight: '600' },
+  toggleBackground: { width: 44, height: 24, borderRadius: 12, padding: 2 },
+  toggleCircle: { width: 20, height: 20, borderRadius: 10, backgroundColor: 'white' },
+  logoutBtn: { marginVertical: 40, alignItems: 'center', flexDirection: 'row', justifyContent: 'center' },
+  logoutTxt: { fontSize: 16, fontWeight: 'bold' }
 });
