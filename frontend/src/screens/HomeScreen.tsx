@@ -151,10 +151,10 @@ export const HomeScreen = ({ navigation }: any) => {
 
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollInside}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.storySection} contentContainerStyle={styles.storyContent}>
-            {renderStoryItem(null, true)}
+            <View key="story-add">{renderStoryItem(null, true)}</View>
             {chats.map(chat => {
               const partner = chat.user_a?.id === user!.id ? chat.user_b : chat.user_a;
-              return renderStoryItem({ ...partner, pairId: chat.id }, false);
+              return <View key={chat.id}>{renderStoryItem({ ...partner, pairId: chat.id }, false)}</View>;
             })}
           </ScrollView>
 

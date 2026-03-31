@@ -9,6 +9,7 @@ import { supabase } from '../services/supabase';
 import { useAuth } from '../context/AuthContext';
 import { MessageBubble } from '../components/MessageBubble';
 import { useTheme } from '../context/ThemeContext';
+import { useCall } from '../context/CallContext';
 
 const { width, height } = Dimensions.get('window');
 
@@ -16,6 +17,7 @@ export const ChatScreen = ({ route, navigation }: any) => {
   const { pairId, partner } = route.params;
   const { user } = useAuth();
   const { colors, isDark } = useTheme();
+  const { initiateCall } = useCall();
   const insets = useSafeAreaInsets();
   const [messages, setMessages] = useState<any[]>([]);
   const [input, setInput] = useState('');
@@ -128,8 +130,8 @@ export const ChatScreen = ({ route, navigation }: any) => {
               </TouchableOpacity>
 
               <View style={styles.headerActions}>
-                <TouchableOpacity onPress={() => Alert.alert('Voice Call', 'Starting call...')} style={styles.actionIcon}><Phone size={22} color={colors.text} /></TouchableOpacity>
-                <TouchableOpacity onPress={() => Alert.alert('Video Call', 'Starting call...')} style={styles.actionIcon}><Video size={22} color={colors.text} /></TouchableOpacity>
+                <TouchableOpacity onPress={() => initiateCall(pairId, partner, false)} style={styles.actionIcon}><Phone size={22} color={colors.text} /></TouchableOpacity>
+                <TouchableOpacity onPress={() => initiateCall(pairId, partner, true)} style={styles.actionIcon}><Video size={22} color={colors.text} /></TouchableOpacity>
                 <TouchableOpacity onPress={() => Alert.alert('Search', 'Find in chat...')} style={styles.actionIcon}><Search size={22} color={colors.text} /></TouchableOpacity>
               </View>
             </View>

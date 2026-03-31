@@ -5,6 +5,8 @@ import * as Linking from 'expo-linking';
 import { AuthProvider } from './src/context/AuthContext';
 import { ThemeProvider } from './src/context/ThemeContext';
 import { AppNavigator } from './src/navigation/AppNavigator';
+import { CallProvider } from './src/context/CallContext';
+import { CallScreen } from './src/screens/CallScreen';
 
 const prefix = Linking.createURL('/');
 
@@ -26,9 +28,12 @@ export default function App() {
   return (
     <ThemeProvider>
       <AuthProvider>
-        <NavigationContainer linking={linking}>
-          <AppNavigator />
-        </NavigationContainer>
+        <CallProvider>
+          <NavigationContainer linking={linking}>
+            <AppNavigator />
+          </NavigationContainer>
+          <CallScreen />
+        </CallProvider>
       </AuthProvider>
     </ThemeProvider>
   );
