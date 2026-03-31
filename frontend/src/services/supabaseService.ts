@@ -296,3 +296,58 @@ export const storageService = {
     } catch (error) { throw error; }
   }
 };
+
+export const messageReactionsService = {
+  async addReaction(messageId: string, emoji: string) {
+    try {
+      const user = await authService.getCurrentUser();
+      if (!user) throw new Error('Auth required');
+      const { data, error } = await supabase.from('message_reactions').insert({
+        message_id: messageId,
+        user_id: user.id,
+        emoji
+      }).select().single();
+      if (error) throw error;
+      return data;
+    } catch (error) { throw error; }
+  },
+
+  async removeReaction(messageId: string) {
+    try {
+      const user = await authService.getCurrentUser();
+      if (!user) throw new Error('Auth required');
+      await supabase.from('message_reactions').delete().eq('message_id', messageId).eq('user_id', user.id);
+    } catch (error) { console.error(error); }
+  },
+
+  async getReactions(messageId: string) {
+    try {
+      const { data, error } = await supabase.from('message_reactions').select('*').eq('message_id', messageId);
+      if (error) throw error;
+      return data || [];
+    } catch (error) { return []; }
+  },
+
+  subscribeToReactions(messageId: string, callback: () => void) {
+    return supabase.channel(`reactions:${messageId}`).on('postgres_changes', { event: '*', schema: 'public', table: 'message_reactions', filter: `message_id=eq.${messageId}` }, callback).subscribe();
+  }
+};
+
+export const deleteMessageService = {
+  async deleteForMe(messageId: string) {
+    try {
+      const user = await authService.getCurrentUser();
+      if (!user) throw new Error('Auth required');
+      await supabase.from('deleted_messages').insert({ message_id: messageId, user_id: user.id });
+    } catch (error) { console.error(error); }
+  },
+
+  async isDeletedForMe(messageId: string) {
+    try {
+      const user = await authService.getCurrentUser();
+      if (!user) return false;
+      const { data } = await supabase.from('deleted_messages').select('id').eq('message_id', messageId).eq('user_id', user.id).maybeSingle();
+      return !!data;
+    } catch (error) { return false; }
+  }
+};

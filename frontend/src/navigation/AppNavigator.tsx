@@ -1,4 +1,5 @@
 import React from 'react';
+import { View, ActivityIndicator, StyleSheet, Text } from 'react-native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuth } from '../context/AuthContext';
 import { LoginScreen } from '../screens/LoginScreen';
@@ -12,10 +13,35 @@ import { RootStackParamList } from './types';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
+const LoadingScreen = () => {
+  return (
+    <View style={styles.loading}>
+      <ActivityIndicator size="large" color="#E91E63" />
+      <Text style={styles.loadingText}>Loading...</Text>
+    </View>
+  );
+};
+
+const styles = StyleSheet.create({
+  loading: { 
+    flex: 1, 
+    justifyContent: 'center', 
+    alignItems: 'center',
+    backgroundColor: '#FCE4EC'
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#E91E63'
+  }
+});
+
 export const AppNavigator = () => {
   const { session, loading } = useAuth();
 
-  if (loading) return null;
+  if (loading) {
+    return <LoadingScreen />;
+  }
 
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>

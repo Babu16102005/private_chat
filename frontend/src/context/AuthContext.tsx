@@ -7,20 +7,22 @@ type AuthContextType = {
   session: Session | null;
   user: User | null;
   loading: boolean;
-  signUp: (email: string, password: string) => Promise<any>;
+  signUp: (email: string, password: string, name?: string) => Promise<any>;
   signIn: (email: string, password: string) => Promise<any>;
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
+  updateProfileName: (name: string) => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextType>({ 
   session: null, 
   user: null, 
-  loading: true,
-  signUp: authService.signUp,
-  signIn: authService.signIn,
-  signOut: authService.signOut,
-  resetPassword: authService.resetPassword
+  loading: false,
+  signUp: async () => {},
+  signIn: async () => {},
+  signOut: async () => {},
+  resetPassword: async () => {},
+  updateProfileName: async () => {}
 });
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
@@ -28,46 +30,60 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Get initial session
+    let isMounted = true;
+    
     const initializeAuth = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
+        if (!isMounted) return;
+        
         setSession(session);
         
-        // Create user profile if it doesn't exist
         if (session?.user) {
-          const profile = await profileService.getProfile(session.user.id);
-          if (!profile) {
-            await profileService.createUserProfile(session.user.id, session.user.email!);
+          try {
+            const profile = await profileService.getProfile(session.user.id);
+            if (!profile) {
+              await profileService.createUserProfile(session.user.id, session.user.email!);
+            }
+          } catch (e) {
+            console.error('Profile error:', e);
           }
         }
       } catch (error) {
         console.error('Auth initialization error:', error);
       } finally {
-        setLoading(false);
+        if (isMounted) setLoading(false);
       }
     };
 
     initializeAuth();
 
-    // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!isMounted) return;
       setSession(session);
       
-      // Create profile on sign up
       if (event === 'SIGNED_IN' && session?.user) {
-        const profile = await profileService.getProfile(session.user.id);
-        if (!profile) {
-          await profileService.createUserProfile(session.user.id, session.user.email!);
-        }
+        try {
+          const profile = await profileService.getProfile(session.user.id);
+          if (!profile) {
+            await profileService.createUserProfile(session.user.id, session.user.email!);
+          }
+        } catch (e) {}
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
-  const signUp = async (email: string, password: string) => {
-    return await authService.signUp(email, password);
+  const signUp = async (email: string, password: string, name?: string) => {
+    const result = await authService.signUp(email, password);
+    if (name && result?.user) {
+      await profileService.updateProfile(result.user.id, { name });
+    }
+    return result;
   };
 
   const signIn = async (email: string, password: string) => {
@@ -82,6 +98,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     await authService.resetPassword(email);
   };
 
+  const updateProfileName = async (name: string) => {
+    if (session?.user) {
+      await profileService.updateProfile(session.user.id, { name });
+    }
+  };
+
   return (
     <AuthContext.Provider value={{ 
       session, 
@@ -90,7 +112,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       signUp,
       signIn,
       signOut,
-      resetPassword
+      resetPassword,
+      updateProfileName
     }}>
       {children}
     </AuthContext.Provider>
