@@ -8,7 +8,7 @@ import { profileService } from '../services/supabaseService';
 
 export const ProfileScreen = ({ navigation }: any) => {
   const { user, signOut } = useAuth();
-  const { isDark, toggleTheme, colors } = useTheme();
+  const { themeMode, toggleTheme, colors } = useTheme();
   const [name, setName] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -81,13 +81,13 @@ export const ProfileScreen = ({ navigation }: any) => {
             onPress={toggleTheme}
           >
             <View style={styles.menuItemLeft}>
-              <View style={[styles.iconBox, { backgroundColor: isDark ? 'rgba(168, 85, 247, 0.1)' : 'rgba(124, 58, 237, 0.05)' }]}>
-                {isDark ? <Moon size={20} color={colors.primary} /> : <Sun size={20} color={colors.primary} />}
+              <View style={[styles.iconBox, { backgroundColor: themeMode === 'obsidian' ? 'rgba(125, 92, 255, 0.1)' : 'rgba(255, 107, 74, 0.1)' }]}>
+                {themeMode === 'obsidian' ? <Moon size={20} color={colors.primary} /> : <Sun size={20} color={colors.primary} />}
               </View>
-              <Text style={[styles.themeLabel, { color: colors.text }]}>{isDark ? 'Dark Mode' : 'Light Mode'}</Text>
+              <Text style={[styles.themeLabel, { color: colors.text }]}>{themeMode === 'obsidian' ? 'Obsidian Theme' : 'Mocha Theme'}</Text>
             </View>
-            <View style={[styles.toggleBackground, { backgroundColor: isDark ? colors.primary : colors.lightGray }]}>
-              <View style={[styles.toggleCircle, { transform: [{ translateX: isDark ? 20 : 0 }] }]} />
+            <View style={[styles.toggleBackground, { backgroundColor: themeMode === 'obsidian' ? colors.primary : colors.lightGray }]}>
+              <View style={[styles.toggleCircle, { transform: [{ translateX: themeMode === 'obsidian' ? 20 : 0 }] }]} />
             </View>
           </TouchableOpacity>
         </View>

@@ -89,7 +89,7 @@ export const CallScreen = () => {
         <LinearGradient colors={colors.gradientPrimary as any} style={styles.remotePlaceholder}>
           <Image 
             source={{ uri: `https://api.dicebear.com/7.x/avataaars/svg?seed=${partnerInfo?.name || 'Partner'}` }} 
-            style={styles.remoteAvatar} 
+            style={[styles.remoteAvatar, { borderRadius: colors.radius.story * 3 }]} 
           />
           <Text style={[styles.remoteName, { color: 'white' }]}>
             {partnerInfo?.name || 'Partner'}

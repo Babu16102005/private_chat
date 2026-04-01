@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, TextInput, ScrollView, Platform, SafeAreaView, Dimensions, Alert, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Settings, Sun, Moon, Search, Plus, MessageCircle, MoreHorizontal, LayoutGrid, Heart, Briefcase } from 'lucide-react-native';
+import { Settings, Sun, Moon, Search, Plus, MessageCircle, MoreHorizontal, LayoutGrid, Heart, Briefcase, Droplets } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '../context/AuthContext';
 import { inviteService, messageService } from '../services/supabaseService';
@@ -13,7 +13,7 @@ const { width, height } = Dimensions.get('window');
 
 export const HomeScreen = ({ navigation }: any) => {
   const { user } = useAuth();
-  const { colors, isDark, toggleTheme } = useTheme();
+  const { colors, isDark, themeMode, toggleTheme } = useTheme();
   const insets = useSafeAreaInsets();
   const [chats, setChats] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -55,8 +55,13 @@ export const HomeScreen = ({ navigation }: any) => {
 
   const renderBackgroundGlows = () => (
     <View style={styles.glowOverlay}>
-      <LinearGradient colors={['rgba(210, 118, 25, 0.2)', 'transparent'] as any} style={[styles.glowBall, { top: -100, right: -50, width: 350, height: 350 }]} />
-      <LinearGradient colors={['rgba(210, 118, 25, 0.1)', 'transparent'] as any} style={[styles.glowBall, { bottom: height * 0.2, left: -100, width: 300, height: 300 }]} />
+      <LinearGradient colors={colors.gradientPrimary as any} style={StyleSheet.absoluteFillObject} />
+      {themeMode === 'mocha' && (
+        <>
+          <LinearGradient colors={['rgba(255, 107, 74, 0.15)', 'transparent'] as any} style={[styles.glowBall, { top: -100, right: -50, width: 350, height: 350 }]} />
+          <LinearGradient colors={['rgba(255, 107, 74, 0.05)', 'transparent'] as any} style={[styles.glowBall, { bottom: height * 0.2, left: -100, width: 300, height: 300 }]} />
+        </>
+      )}
     </View>
   );
 
@@ -67,13 +72,13 @@ export const HomeScreen = ({ navigation }: any) => {
         style={styles.storyCard}
         onPress={() => isAdd ? navigation.navigate('Invite') : navigation.navigate('Chat', { pairId: partner.pairId, partner })}
       >
-        <View style={[styles.storyAvatarWrap, { borderRadius: colors.radius.story, backgroundColor: colors.white, borderColor: colors.glassBorder, borderWidth: colors.borderWidth }]}>
+        <View style={[styles.storyAvatarWrap, { borderRadius: colors.radius.story, backgroundColor: colors.background, borderColor: colors.glassBorder, borderWidth: colors.borderWidth }]}>
           {isAdd ? (
             <Plus size={24} color={colors.primary} strokeWidth={2.5} />
           ) : (
-            <Image source={{ uri: `https://api.dicebear.com/7.x/avataaars/svg?seed=${partner?.name || 'User'}` }} style={styles.storyImg} />
+            <Image source={{ uri: `https://api.dicebear.com/7.x/avataaars/svg?seed=${partner?.name || 'User'}` }} style={[styles.storyImg, { borderRadius: colors.radius.story }]} />
           )}
-          {isOnline && <View style={[styles.storyBadge, { backgroundColor: colors.tertiary, borderColor: colors.black }]} />}
+          {isOnline && <View style={[styles.storyBadge, { backgroundColor: colors.tertiary, borderColor: colors.background }]} />}
         </View>
         <Text style={[styles.storyLabel, { color: colors.text }]} numberOfLines={1}>
           {isAdd ? 'You' : (partner?.name?.split(' ')[0] || 'User')}
@@ -92,8 +97,8 @@ export const HomeScreen = ({ navigation }: any) => {
         onPress={() => navigation.navigate('Chat', { pairId: item.id, partner })}
       >
         <View style={styles.chatThumbWrap}>
-          <Image source={{ uri: `https://api.dicebear.com/7.x/avataaars/svg?seed=${partner?.name || 'User'}` }} style={styles.chatThumb} />
-          {isOnline && <View style={[styles.onlineIndicator, { backgroundColor: colors.tertiary, borderColor: colors.black }]} />}
+          <Image source={{ uri: `https://api.dicebear.com/7.x/avataaars/svg?seed=${partner?.name || 'User'}` }} style={[styles.chatThumb, { borderRadius: colors.radius.story }]} />
+          {isOnline && <View style={[styles.onlineIndicator, { backgroundColor: colors.tertiary, borderColor: colors.background }]} />}
         </View>
         <View style={styles.chatMain}>
           <View style={styles.chatTopLine}>
@@ -129,7 +134,9 @@ export const HomeScreen = ({ navigation }: any) => {
         <View style={styles.header}>
           <Text style={[styles.headerTitle, { color: colors.text }]}>Chats</Text>
           <View style={styles.headerRight}>
-            <TouchableOpacity onPress={() => Alert.alert('Menu', 'Opening settings...')} style={styles.headerAction}><MoreHorizontal size={24} color={colors.text} /></TouchableOpacity>
+            <TouchableOpacity onPress={toggleTheme} style={styles.headerAction}>
+              {themeMode === 'obsidian' ? <Droplets size={24} color={colors.primary} /> : <Moon size={24} color={colors.primary} />}
+            </TouchableOpacity>
             <TouchableOpacity onPress={() => navigation.navigate('Profile')} style={[styles.headerAvatarMini, { borderColor: colors.glassBorder, borderWidth: colors.borderWidth }]}>
               <Image source={{ uri: `https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.email || 'User'}` }} style={{ width: '100%', height: '100%' }} />
             </TouchableOpacity>
@@ -137,7 +144,7 @@ export const HomeScreen = ({ navigation }: any) => {
         </View>
 
         <View style={styles.searchWrapper}>
-          <BlurView intensity={colors.glassBlur} tint={isDark ? 'dark' : 'light'} style={[styles.searchPill, { borderColor: colors.glassBorder, borderWidth: colors.borderWidth }]}>
+          <BlurView intensity={colors.glassBlur} tint={isDark ? 'dark' : 'light'} style={[styles.searchPill, { backgroundColor: colors.lightGray, borderColor: colors.glassBorder, borderWidth: colors.borderWidth, borderRadius: colors.radius.pill }]}>
             <Search size={20} color={colors.gray} style={{ marginRight: 10 }} />
             <TextInput
               style={[styles.searchInput, { color: colors.text }]}
@@ -158,7 +165,7 @@ export const HomeScreen = ({ navigation }: any) => {
             })}
           </ScrollView>
 
-          <BlurView intensity={colors.glassBlur} tint={isDark ? 'dark' : 'light'} style={[styles.glassListContainer, { borderColor: colors.glassBorder, borderWidth: colors.borderWidth, borderRadius: colors.radius.panel }]}>
+          <BlurView intensity={colors.glassBlur} tint={isDark ? 'dark' : 'light'} style={[styles.glassListContainer, { backgroundColor: themeMode === 'obsidian' ? colors.background : 'transparent', borderColor: colors.glassBorder, borderWidth: colors.borderWidth, borderRadius: colors.radius.panel }]}>
             <FlatList
               data={filteredChats}
               keyExtractor={(item) => item.id}

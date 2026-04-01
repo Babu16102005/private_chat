@@ -230,7 +230,7 @@ export const messageService = {
     }
   },
 
-  async sendMessage(pairId: string, content: string, mediaUrl?: string, messageType: 'text' | 'image' | 'video' = 'text') {
+  async sendMessage(pairId: string, content: string, mediaUrl?: string, messageType: 'text' | 'image' | 'video' | 'audio' = 'text') {
     try {
       const user = await authService.getCurrentUser();
       if (!user) throw new Error('Auth required');
@@ -289,7 +289,8 @@ export const storageService = {
     try {
       const user = await authService.getCurrentUser();
       if (!user) throw new Error('Auth required');
-      const fileName = `${user.id}/${Date.now()}.${file.name.split('.').pop()}`;
+      const ext = file.name ? file.name.split('.').pop() : 'bin';
+      const fileName = `${user.id}/${Date.now()}.${ext}`;
       const { data, error } = await supabase.storage.from(bucket).upload(fileName, file);
       if (error) throw error;
       return supabase.storage.from(bucket).getPublicUrl(fileName).data.publicUrl;

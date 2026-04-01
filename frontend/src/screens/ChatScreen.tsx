@@ -3,8 +3,10 @@ import { View, Text, TextInput, TouchableOpacity, FlatList, StyleSheet, Image, A
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
-import { ChevronLeft, Phone, Video, Mic, Plus, SendHorizontal, MoreVertical, Search } from 'lucide-react-native';
-import { messageService, deleteMessageService } from '../services/supabaseService';
+import { ChevronLeft, Phone, Video, Mic, Plus, SendHorizontal, MoreVertical, Search, X, Square } from 'lucide-react-native';
+import { messageService, deleteMessageService, storageService } from '../services/supabaseService';
+import * as ImagePicker from 'expo-image-picker';
+import { Audio } from 'expo-av';
 import { supabase } from '../services/supabase';
 import { useAuth } from '../context/AuthContext';
 import { MessageBubble } from '../components/MessageBubble';
@@ -16,7 +18,7 @@ const { width, height } = Dimensions.get('window');
 export const ChatScreen = ({ route, navigation }: any) => {
   const { pairId, partner } = route.params;
   const { user } = useAuth();
-  const { colors, isDark } = useTheme();
+  const { colors, isDark, themeMode } = useTheme();
   const { initiateCall } = useCall();
   const insets = useSafeAreaInsets();
   const [messages, setMessages] = useState<any[]>([]);
@@ -24,6 +26,9 @@ export const ChatScreen = ({ route, navigation }: any) => {
   const [loading, setLoading] = useState(true);
   const [isOnline, setIsOnline] = useState(false);
   const [isPartnerTyping, setIsPartnerTyping] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isSearching, setIsSearching] = useState(false);
+  const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const flatListRef = useRef<FlatList>(null);
   const typingTimeoutRef = useRef<any>(null);
   const typingChannelRef = useRef<any>(null);
@@ -89,10 +94,68 @@ export const ChatScreen = ({ route, navigation }: any) => {
     } catch (error) { console.error('Send message fail:', error); }
   };
 
+  const handleAttach = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.All,
+        allowsEditing: true,
+        quality: 0.7,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        const asset = result.assets[0];
+        const response = await fetch(asset.uri);
+        const blob: any = await response.blob();
+        blob.name = asset.uri.split('/').pop() || 'photo.jpg';
+        const url = await storageService.uploadFile(blob);
+        await messageService.sendMessage(pairId, '', url, 'image');
+      }
+    } catch (e) {
+      console.error(e);
+      Alert.alert('Error', 'Failed to attach image');
+    }
+  };
+
+  const startVoice = async () => {
+    try {
+      const permission = await Audio.requestPermissionsAsync();
+      if (permission.status !== 'granted') return Alert.alert('Permission Denied');
+      
+      await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
+      const { recording: newRecording } = await Audio.Recording.createAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
+      setRecording(newRecording);
+    } catch (err) { console.error('Failed to start recording', err); }
+  };
+
+  const stopVoice = async () => {
+    if (!recording) return;
+    try {
+      await recording.stopAndUnloadAsync();
+      const uri = recording.getURI();
+      setRecording(null);
+      if (uri) {
+        const response = await fetch(uri);
+        const blob: any = await response.blob();
+        blob.name = 'voice.m4a';
+        const url = await storageService.uploadFile(blob);
+        await messageService.sendMessage(pairId, '', url, 'audio');
+      }
+    } catch (error) { console.error(error); }
+  };
+
+  const displayMessages = isSearching && searchQuery 
+    ? messages.filter(m => m.content?.toLowerCase().includes(searchQuery.toLowerCase()))
+    : messages;
+
   const renderBackgroundGlows = () => (
     <View style={styles.glowOverlay}>
-      <LinearGradient colors={['rgba(210, 118, 25, 0.15)', 'transparent'] as any} style={[styles.glowBall, { top: height * 0.1, left: -50, width: 300, height: 300 }]} />
-      <LinearGradient colors={['rgba(210, 118, 25, 0.1)', 'transparent'] as any} style={[styles.glowBall, { bottom: 100, right: -50, width: 350, height: 350 }]} />
+      <LinearGradient colors={colors.gradientPrimary as any} style={StyleSheet.absoluteFillObject} />
+      {themeMode === 'mocha' && (
+        <>
+          <LinearGradient colors={['rgba(255, 107, 74, 0.15)', 'transparent'] as any} style={[styles.glowBall, { top: height * 0.1, left: -50, width: 300, height: 300 }]} />
+          <LinearGradient colors={['rgba(255, 107, 74, 0.05)', 'transparent'] as any} style={[styles.glowBall, { bottom: height * 0.1, right: -50, width: 350, height: 350 }]} />
+        </>
+      )}
     </View>
   );
 
@@ -109,7 +172,11 @@ export const ChatScreen = ({ route, navigation }: any) => {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
         style={{ flex: 1 }}
       >
-        <BlurView intensity={colors.glassBlur} tint={isDark ? 'dark' : 'light'} style={[styles.headerGlass, { borderBottomColor: colors.glassBorder, borderBottomWidth: colors.borderWidth }]}>
+        <BlurView 
+          intensity={themeMode === 'obsidian' ? 0 : colors.glassBlur} 
+          tint={isDark ? 'dark' : 'light'} 
+          style={[styles.headerGlass, { backgroundColor: themeMode === 'obsidian' ? colors.background : 'transparent', borderBottomColor: colors.glassBorder, borderBottomWidth: colors.borderWidth }]}
+        >
           <SafeAreaView edges={['top']} style={styles.headerSafe}>
             <View style={styles.headerContent}>
               <TouchableOpacity onPress={() => navigation.goBack()} style={styles.navBtn}>
@@ -118,8 +185,8 @@ export const ChatScreen = ({ route, navigation }: any) => {
               
               <TouchableOpacity activeOpacity={0.7} onPress={() => Alert.alert('Profile', partner?.name)} style={styles.partnerInfo}>
                 <View style={styles.avatarWrap}>
-                  <Image source={{ uri: `https://api.dicebear.com/7.x/avataaars/svg?seed=${partner?.name || 'Partner'}` }} style={styles.headerAvatar} />
-                  {isOnline && <View style={[styles.onlineDot, { backgroundColor: colors.tertiary, borderColor: colors.black }]} />}
+                  <Image source={{ uri: `https://api.dicebear.com/7.x/avataaars/svg?seed=${partner?.name || 'Partner'}` }} style={[styles.headerAvatar, { borderRadius: colors.radius.story }]} />
+                  {isOnline && <View style={[styles.onlineDot, { backgroundColor: colors.tertiary, borderColor: colors.background }]} />}
                 </View>
                 <View>
                   <Text style={[styles.headerName, { color: colors.text }]}>{partner?.name || 'Partner'}</Text>
@@ -132,19 +199,35 @@ export const ChatScreen = ({ route, navigation }: any) => {
               <View style={styles.headerActions}>
                 <TouchableOpacity onPress={() => initiateCall(pairId, partner, false)} style={styles.actionIcon}><Phone size={22} color={colors.text} /></TouchableOpacity>
                 <TouchableOpacity onPress={() => initiateCall(pairId, partner, true)} style={styles.actionIcon}><Video size={22} color={colors.text} /></TouchableOpacity>
-                <TouchableOpacity onPress={() => Alert.alert('Search', 'Find in chat...')} style={styles.actionIcon}><Search size={22} color={colors.text} /></TouchableOpacity>
+                <TouchableOpacity onPress={() => setIsSearching(!isSearching)} style={styles.actionIcon}>
+                  {isSearching ? <X size={22} color={colors.text} /> : <Search size={22} color={colors.text} />}
+                </TouchableOpacity>
               </View>
             </View>
+            {isSearching && (
+              <View style={{ paddingHorizontal: 20, paddingBottom: 10 }}>
+                <TextInput
+                  style={[styles.inputPill, { backgroundColor: 'rgba(0,0,0,0.1)', color: colors.text, height: 40 }]}
+                  placeholder="Search in chat..."
+                  placeholderTextColor={colors.gray}
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  autoFocus
+                />
+              </View>
+            )}
           </SafeAreaView>
         </BlurView>
 
         <FlatList
           ref={flatListRef}
-          data={messages}
+          data={displayMessages}
           renderItem={({ item }) => (
             <View style={styles.bubbleRow}>
               <MessageBubble 
                 content={item.content} 
+                mediaUrl={item.media_url}
+                messageType={item.message_type}
                 isMe={item.sender_id === user!.id} 
                 timestamp={item.created_at}
                 delivered_at={item.delivered_at}
@@ -160,8 +243,17 @@ export const ChatScreen = ({ route, navigation }: any) => {
         />
 
         <View style={[styles.pillWrapper, { paddingBottom: Math.max(insets.bottom, 15) }]}>
-          <BlurView intensity={colors.glassBlur} tint={isDark ? 'dark' : 'light'} style={[styles.inputPill, { borderColor: colors.glassBorder, borderWidth: colors.borderWidth }]}>
-            <TouchableOpacity onPress={() => Alert.alert('Attach', 'Pick a file...')} style={styles.pillAction}><Plus size={24} color={colors.gray} /></TouchableOpacity>
+          <BlurView 
+            intensity={themeMode === 'obsidian' ? 0 : colors.glassBlur} 
+            tint={isDark ? 'dark' : 'light'} 
+            style={[styles.inputPill, { 
+              backgroundColor: themeMode === 'obsidian' ? colors.bubbleSentBg : colors.lightGray,
+              borderColor: colors.glassBorder, 
+              borderWidth: colors.borderWidth,
+              borderRadius: colors.radius.pill
+            }]}
+          >
+            <TouchableOpacity onPress={handleAttach} style={styles.pillAction}><Plus size={24} color={colors.gray} /></TouchableOpacity>
             <TextInput
               style={[styles.inputField, { color: colors.text }]}
               placeholder="Type a message..."
@@ -177,7 +269,9 @@ export const ChatScreen = ({ route, navigation }: any) => {
                 </LinearGradient>
               </TouchableOpacity>
             ) : (
-              <TouchableOpacity onPress={() => Alert.alert('Voice', 'Record audio...')} style={styles.pillAction}><Mic size={24} color={colors.gray} /></TouchableOpacity>
+              <TouchableOpacity onPress={recording ? stopVoice : startVoice} style={styles.pillAction}>
+                 {recording ? <Square size={24} color={colors.tertiary} fill={colors.tertiary} /> : <Mic size={24} color={colors.gray} />}
+              </TouchableOpacity>
             )}
           </BlurView>
         </View>

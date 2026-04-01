@@ -47,7 +47,7 @@ CREATE TABLE IF NOT EXISTS public.messages (
   sender_id UUID REFERENCES public.users(id) ON DELETE CASCADE NOT NULL,
   content TEXT,
   media_url TEXT,
-  message_type TEXT DEFAULT 'text' CHECK (message_type IN ('text', 'image', 'video')),
+  message_type TEXT DEFAULT 'text' CHECK (message_type IN ('text', 'image', 'video', 'audio')),
   delivered_at TIMESTAMPTZ,
   read_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW()
@@ -201,3 +201,23 @@ ALTER PUBLICATION supabase_realtime ADD TABLE
 -- INSERT INTO public.pairs (user_a_id, user_b_id, status) 
 -- VALUES ('7d059305-de07-48c5-9103-d6ebb638c909', '6c6715a1-a561-40d5-8b3a-b09a17ad8709', 'active')
 -- ON CONFLICT (user_a_id, user_b_id) DO NOTHING;
+
+-- ============================================================================
+-- PART 6: STORAGE BUCKETS & POLICIES
+-- ============================================================================
+
+-- Create the 'chat-media' storage bucket if it does not exist
+INSERT INTO storage.buckets (id, name, public) 
+VALUES ('chat-media', 'chat-media', true)
+ON CONFLICT (id) DO NOTHING;
+
+-- Storage Policies to allow users to view and upload media
+DROP POLICY IF EXISTS "Public Access" ON storage.objects;
+CREATE POLICY "Public Access" 
+ON storage.objects FOR SELECT 
+USING ( bucket_id = 'chat-media' );
+
+DROP POLICY IF EXISTS "Authenticated Users can Upload" ON storage.objects;
+CREATE POLICY "Authenticated Users can Upload" 
+ON storage.objects FOR INSERT 
+WITH CHECK ( bucket_id = 'chat-media' AND auth.role() = 'authenticated' );
