@@ -83,7 +83,7 @@ export const profileService = {
     }
   },
 
-  async updateProfile(userId: string, updates: { name?: string; avatar_url?: string; push_token?: string }) {
+  async updateProfile(userId: string, updates: { name?: string; about?: string; avatar_url?: string; push_token?: string }) {
     try {
       const { data, error } = await supabase.from('users').update(updates).eq('id', userId).select().single();
       if (error) throw error;
@@ -128,7 +128,7 @@ export const inviteService = {
         .single();
       
       if (error) throw error;
-      return { ...data, deep_link: `couplechat://accept?token=${token}` };
+      return { ...data, deep_link: `chatapp://accept?token=${token}` };
     } catch (error) {
       handleError(error, 'Could not send invite');
       throw error;
@@ -184,17 +184,18 @@ export const inviteService = {
           *,
           user_a:users!pairs_user_a_id_fkey(*),
           user_b:users!pairs_user_b_id_fkey(*),
-          messages:messages(content, created_at, message_type)
+          messages:messages(content, created_at, message_type, sender_id, read_at)
         `)
         .or(`user_a_id.eq.${user.id},user_b_id.eq.${user.id}`)
         .eq('status', 'active');
       
       if (error) throw error;
       
-      // Sort and pick latest message for each
+      // Sort and pick latest message + calculate unread count for each
       return (data || []).map((p: any) => {
           const sortedMsgs = p.messages.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-          return { ...p, last_message: sortedMsgs[0] || null };
+          const unread = p.messages.filter((m: any) => m.sender_id !== user.id && !m.read_at).length;
+          return { ...p, last_message: sortedMsgs[0] || null, unread_count: unread };
       });
     } catch (error) {
       return [];
@@ -230,14 +231,24 @@ export const messageService = {
     }
   },
 
-  async sendMessage(pairId: string, content: string, mediaUrl?: string, messageType: 'text' | 'image' | 'video' | 'audio' = 'text') {
+  async sendMessage(pairId: string, content: string, mediaUrl?: string, messageType: 'text' | 'image' | 'video' | 'audio' = 'text', replyToMessageId?: string) {
     try {
       const user = await authService.getCurrentUser();
       if (!user) throw new Error('Auth required');
-      const { data, error } = await supabase.from('messages').insert({ pair_id: pairId, sender_id: user.id, content, media_url: mediaUrl, message_type: messageType }).select().single();
+      const payload: any = { pair_id: pairId, sender_id: user.id, content, media_url: mediaUrl, message_type: messageType };
+      if (replyToMessageId) payload.reply_to_message_id = replyToMessageId;
+      const { data, error } = await supabase.from('messages').insert(payload).select().single();
       if (error) throw error;
       return data;
     } catch (error) { throw error; }
+  },
+
+  async getRepliedMessage(messageId: string) {
+    try {
+      const { data, error } = await supabase.from('messages').select('*').eq('id', messageId).maybeSingle();
+      if (error) throw error;
+      return data;
+    } catch (error) { return null; }
   },
 
   async markMessageAsRead(messageId: string) {
@@ -351,4 +362,31 @@ export const deleteMessageService = {
       return !!data;
     } catch (error) { return false; }
   }
+};
+
+export const chatSettingsService = {
+  async blockUser(pairId: string) {
+    try {
+      await supabase.from('pairs').update({ is_blocked: true }).eq('id', pairId);
+    } catch (error) { console.error('Block user error:', error); }
+  },
+
+  async unblockUser(pairId: string) {
+    try {
+      await supabase.from('pairs').update({ is_blocked: false }).eq('id', pairId);
+    } catch (error) { console.error('Unblock user error:', error); }
+  },
+
+  async clearChat(pairId: string) {
+    try {
+      const user = await authService.getCurrentUser();
+      if (!user) return;
+      const { data } = await supabase.from('messages').select('id').eq('pair_id', pairId);
+      if (!data || data.length === 0) return;
+      const messageIds = data.map((m: any) => m.id);
+      const inserts = messageIds.map((id: string) => ({ message_id: id, user_id: user.id }));
+      const { error } = await supabase.from('deleted_messages').upsert(inserts, { onConflict: 'message_id,user_id', ignoreDuplicates: true });
+      if (error) console.error('Clear chat upsert error:', error);
+    } catch (error) { console.error('Clear chat error:', error); }
+  },
 };

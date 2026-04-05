@@ -12,7 +12,7 @@ const prefix = Linking.createURL('/');
 
 export default function App() {
   const linking = {
-    prefixes: [prefix, 'couplechat://'],
+    prefixes: [prefix, 'chatapp://'],
     config: {
       screens: {
         Invite: {

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Platform, KeyboardAvoidingView } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, KeyboardAvoidingView, Platform } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Mail, ChevronLeft, Send } from 'lucide-react-native';
 import { useAuth } from '../context/AuthContext';
@@ -11,56 +12,59 @@ export const ForgotPasswordScreen = ({ navigation }: any) => {
   const [loading, setLoading] = useState(false);
   const { resetPassword } = useAuth();
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
 
   const handleReset = async () => {
     if (!email.trim()) { handleError('Please enter your email'); return; }
     setLoading(true);
-    try { await resetPassword(email); Alert.alert('Success', 'A password reset link has been sent to your email.'); navigation.navigate('Login'); }
+    try { await resetPassword(email); Alert.alert('Sent', 'Check your email for the reset link.'); navigation.navigate('Login'); }
     catch (error: any) { handleError(error, 'Failed to send reset email'); }
     finally { setLoading(false); }
   };
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-      <View style={[styles.container, { backgroundColor: colors.background }]}>
-        <View style={styles.topShape}>
-          <LinearGradient colors={colors.gradientPrimary as any} style={styles.glowCircle} />
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.container}>
+      <View style={[styles.inner, { backgroundColor: colors.background }]}>
+        <View style={styles.topBar}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+            <ChevronLeft size={28} color={colors.text} />
+          </TouchableOpacity>
         </View>
 
         <View style={styles.content}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-            <ChevronLeft size={34} color={colors.text} />
-          </TouchableOpacity>
           <Text style={[styles.title, { color: colors.text }]}>Forgot Password?</Text>
-          <Text style={[styles.subtitle, { color: colors.gray }]}>Enter your email to receive a recovery link</Text>
-          
-          <View style={styles.inputArea}>
-            <View style={[styles.inputWrapper, { backgroundColor: colors.white, borderColor: colors.glassBorder, borderWidth: colors.borderWidth, borderRadius: colors.radius.card }]}>
-              <Mail size={20} color={colors.gray} style={styles.inputIcon} />
-              <TextInput 
-                style={[styles.input, { color: colors.text }]} 
-                placeholder="Recovery Email Address" 
-                value={email} 
-                onChangeText={setEmail} 
-                autoCapitalize="none" 
-                keyboardType="email-address" 
-                placeholderTextColor={colors.gray} 
-              />
-            </View>
+          <Text style={[styles.subtitle, { color: colors.gray }]}>Enter your email and we&apos;ll send you a link to reset your password.</Text>
 
-            <TouchableOpacity style={[styles.button, { borderRadius: colors.radius.card }]} onPress={handleReset} disabled={loading}>
-              <LinearGradient colors={colors.gradientPrimary as any} style={styles.buttonGrad}>
-                <Text style={styles.buttonText}>{loading ? 'Sending...' : 'Send Recovery Link'}</Text>
-                {!loading && <Send size={20} color="white" style={{ marginLeft: 10 }} />}
-              </LinearGradient>
-            </TouchableOpacity>
-
-            <TouchableOpacity onPress={() => navigation.navigate('Login')} style={styles.switchBtn}>
-              <Text style={[styles.switchText, { color: colors.gray }]}>
-                Remembered? <Text style={[styles.link, { color: colors.primary }]}>Go back to Login</Text>
-              </Text>
-            </TouchableOpacity>
+          <View style={[styles.inputWrap, { backgroundColor: 'rgba(255,255,255,0.05)', borderColor: colors.glassBorder, borderRadius: 14 }]}>
+            <Mail size={20} color={colors.gray} style={{ marginRight: 12 }} />
+            <TextInput
+              style={[styles.input, { color: colors.text }]}
+              placeholder="Email address"
+              value={email}
+              onChangeText={setEmail}
+              autoCapitalize="none"
+              keyboardType="email-address"
+              placeholderTextColor={colors.gray}
+            />
           </View>
+
+          <TouchableOpacity style={[styles.sendBtn, { borderRadius: 14 }]} onPress={handleReset} disabled={loading}>
+            <LinearGradient colors={colors.gradientPrimary as any} style={styles.sendGrad}>
+              {loading ? <Text style={styles.btnText}>Sending...</Text> : (
+                <>
+                  <Text style={styles.btnText}>Send Reset Link</Text>
+                  <Send size={18} color="white" style={{ marginLeft: 8 }} />
+                </>
+              )}
+            </LinearGradient>
+          </TouchableOpacity>
+
+          <TouchableOpacity onPress={() => navigation.navigate('Login')} style={styles.backToLoginBtn}>
+            <Text style={[styles.backToLoginText, { color: colors.gray }]}>
+              Remember your password?{' '}
+              <Text style={{ color: colors.primary, fontWeight: '700' }}>Sign In</Text>
+            </Text>
+          </TouchableOpacity>
         </View>
       </View>
     </KeyboardAvoidingView>
@@ -68,21 +72,18 @@ export const ForgotPasswordScreen = ({ navigation }: any) => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 30, justifyContent: 'center' },
-  topShape: { position: 'absolute', top: -100, right: -50, opacity: 0.3 },
-  glowCircle: { width: 300, height: 300, borderRadius: 150 },
-  content: { zIndex: 1 },
-  backBtn: { width: 44, height: 44, justifyContent: 'center', alignItems: 'center', marginBottom: 20, marginLeft: -10 },
-  title: { fontSize: 32, fontWeight: '800', marginBottom: 10 },
-  subtitle: { fontSize: 16, marginBottom: 40, fontWeight: '500' },
-  inputArea: { marginTop: 10 },
-  inputWrapper: { flexDirection: 'row', alignItems: 'center', marginBottom: 25, paddingHorizontal: 20, height: 60, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 1 },
-  inputIcon: { marginRight: 15 },
-  input: { flex: 1, fontSize: 16, fontWeight: '500' },
-  button: { height: 60, overflow: 'hidden', elevation: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8 },
-  buttonGrad: { flex: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'center' },
-  buttonText: { color: '#FFFFFF', fontWeight: 'bold', fontSize: 18 },
-  switchBtn: { marginTop: 25 },
-  switchText: { textAlign: 'center', fontSize: 14, fontWeight: '500' },
-  link: { fontWeight: '700' }
+  container: { flex: 1 },
+  inner: { flex: 1 },
+  topBar: { paddingHorizontal: 16, paddingTop: 10 },
+  backBtn: { width: 40, height: 40, justifyContent: 'center', alignItems: 'center' },
+  content: { flex: 1, justifyContent: 'center', paddingHorizontal: 28, gap: 20 },
+  title: { fontSize: 30, fontWeight: '800' },
+  subtitle: { fontSize: 15, lineHeight: 22, fontWeight: '400' },
+  inputWrap: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, height: 56, marginBottom: 4 },
+  input: { flex: 1, fontSize: 16 },
+  sendBtn: { overflow: 'hidden', height: 56 },
+  sendGrad: { flex: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'center' },
+  btnText: { color: '#FFFFFF', fontWeight: '700', fontSize: 16 },
+  backToLoginBtn: { paddingTop: 8, alignItems: 'center' },
+  backToLoginText: { fontSize: 14, textAlign: 'center' },
 });

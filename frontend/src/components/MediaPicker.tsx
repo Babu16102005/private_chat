@@ -1,16 +1,18 @@
 import React from 'react';
 import { TouchableOpacity, Text, StyleSheet, Alert } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { theme } from '../constants/theme';
+import { useTheme } from '../context/ThemeContext';
 
 interface MediaPickerProps {
   onMediaSelect: (asset: ImagePicker.ImagePickerAsset) => void;
 }
 
 export const MediaPicker: React.FC<MediaPickerProps> = ({ onMediaSelect }) => {
+  const { colors } = useTheme();
+
   const pickMedia = async () => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    
+
     if (permission.status !== 'granted') {
       Alert.alert('Permission needed', 'Allow camera roll access to send photos and videos.');
       return;
@@ -30,7 +32,7 @@ export const MediaPicker: React.FC<MediaPickerProps> = ({ onMediaSelect }) => {
 
   return (
     <TouchableOpacity style={styles.button} onPress={pickMedia}>
-      <Text style={styles.text}>📸</Text>
+      <Text style={[styles.text, { color: colors.primary }]}>📸</Text>
     </TouchableOpacity>
   );
 };
@@ -44,6 +46,5 @@ const styles = StyleSheet.create({
   },
   text: {
     fontSize: 24,
-    color: theme.colors.primary,
   }
 });

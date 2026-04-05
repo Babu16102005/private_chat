@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS public.users (
   name TEXT,
   avatar_url TEXT,
   push_token TEXT,
+  about TEXT DEFAULT 'Hey there! I am using ChatApplication',
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -36,6 +37,7 @@ CREATE TABLE IF NOT EXISTS public.pairs (
   user_a_id UUID REFERENCES public.users(id) ON DELETE CASCADE NOT NULL,
   user_b_id UUID REFERENCES public.users(id) ON DELETE CASCADE NOT NULL,
   status TEXT DEFAULT 'active' CHECK (status IN ('active', 'blocked')),
+  is_blocked BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   CONSTRAINT pairs_unique_connection UNIQUE(user_a_id, user_b_id)
 );
@@ -50,6 +52,7 @@ CREATE TABLE IF NOT EXISTS public.messages (
   message_type TEXT DEFAULT 'text' CHECK (message_type IN ('text', 'image', 'video', 'audio')),
   delivered_at TIMESTAMPTZ,
   read_at TIMESTAMPTZ,
+  reply_to_message_id UUID REFERENCES public.messages(id),
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

@@ -16,12 +16,18 @@ if (Platform.OS === 'web') {
   mediaDevicesImpl = typeof navigator !== 'undefined' ? navigator.mediaDevices : null;
   MediaStreamImpl = globalThis.MediaStream;
 } else {
-  const webrtc = require('react-native-webrtc');
-  RTCPeerConnectionImpl = webrtc.RTCPeerConnection;
-  RTCIceCandidateImpl = webrtc.RTCIceCandidate;
-  RTCSessionDescriptionImpl = webrtc.RTCSessionDescription;
-  mediaDevicesImpl = webrtc.mediaDevices;
-  MediaStreamImpl = webrtc.MediaStream;
+  try {
+    const webrtc = require('react-native-webrtc');
+    RTCPeerConnectionImpl = webrtc.RTCPeerConnection;
+    RTCIceCandidateImpl = webrtc.RTCIceCandidate;
+    RTCSessionDescriptionImpl = webrtc.RTCSessionDescription;
+    mediaDevicesImpl = webrtc.mediaDevices;
+    MediaStreamImpl = webrtc.MediaStream;
+  } catch (e) {
+    console.warn(
+      'WebRTC native module not found. Calls require a custom dev build. Run `npx expo run:android`.'
+    );
+  }
 }
 
 type CallState = 'IDLE' | 'RINGING' | 'CONNECTED' | 'REJECTED' | 'ENDED';
@@ -108,33 +114,14 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
   }, [removeChannel]);
 
-  const subscribeToChannel = useCallback((channel: any) => {
-    return new Promise<void>((resolve, reject) => {
-      let settled = false;
-      channel.subscribe((status: string) => {
-        if (settled) return;
-
-        if (status === 'SUBSCRIBED') {
-          settled = true;
-          resolve();
-        }
-
-        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
-          settled = true;
-          reject(new Error(`Realtime channel error: ${status}`));
-        }
-      });
-    });
-  }, []);
-
-  const ensureOutboundChannel = useCallback(async (targetUserId: string) => {
+  const ensureOutboundChannel = useCallback((targetUserId: string) => {
     removeChannel(outboundChannel);
 
     const channel = supabase.channel(`calls:${targetUserId}`);
     outboundChannel.current = channel;
-    await subscribeToChannel(channel);
+    channel.subscribe(); // fire-and-forget; broadcast works immediately
     return channel;
-  }, [removeChannel, subscribeToChannel]);
+  }, [removeChannel]);
 
   const sendSignal = useCallback(async (event: string, payload: Record<string, any>) => {
     if (!outboundChannel.current) {

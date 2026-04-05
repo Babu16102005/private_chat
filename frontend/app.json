@@ -5,7 +5,7 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "scheme": "couplechat",
+    "scheme": "chatapp",
     "userInterfaceStyle": "light",
     "splash": {
       "image": "./assets/splash.png",
@@ -17,9 +17,9 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.couplechat.app",
+      "bundleIdentifier": "com.chatapplication.app",
       "associatedDomains": [
-        "applinks:couplechat.app"
+        "applinks:chatapplication.app"
       ]
     },
     "android": {
@@ -27,13 +27,13 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.couplechat.app",
+      "package": "com.chatapplication.app",
       "intentFilters": [
         {
           "action": "VIEW",
           "data": [
             {
-              "scheme": "couplechat",
+              "scheme": "chatapp",
               "host": "accept"
             }
           ],

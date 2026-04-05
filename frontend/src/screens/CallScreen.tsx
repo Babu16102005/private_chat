@@ -87,9 +87,9 @@ export const CallScreen = () => {
         renderVideo(remoteStream, styles.remoteVideo)
       ) : (
         <LinearGradient colors={colors.gradientPrimary as any} style={styles.remotePlaceholder}>
-          <Image 
-            source={{ uri: `https://api.dicebear.com/7.x/avataaars/svg?seed=${partnerInfo?.name || 'Partner'}` }} 
-            style={[styles.remoteAvatar, { borderRadius: colors.radius.story * 3 }]} 
+          <Image
+            source={{ uri: `https://api.dicebear.com/7.x/avataaars/svg?seed=${partnerInfo?.name || 'Partner'}` }}
+            style={styles.remoteAvatar}
           />
           <Text style={[styles.remoteName, { color: 'white' }]}>
             {partnerInfo?.name || 'Partner'}

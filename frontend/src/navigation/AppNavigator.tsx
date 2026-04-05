@@ -9,6 +9,7 @@ import { HomeScreen } from '../screens/HomeScreen';
 import { ChatScreen } from '../screens/ChatScreen';
 import { InviteScreen } from '../screens/InviteScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
+import { ChatSettingsScreen } from '../screens/ChatSettingsScreen';
 import { RootStackParamList } from './types';
 
 import { useTheme } from '../context/ThemeContext';
@@ -56,6 +57,7 @@ export const AppNavigator = () => {
           <Stack.Screen name="Chat" component={ChatScreen} />
           <Stack.Screen name="Invite" component={InviteScreen} />
           <Stack.Screen name="Profile" component={ProfileScreen} />
+          <Stack.Screen name="ChatSettings" component={ChatSettingsScreen} />
         </>
       ) : (
         <>

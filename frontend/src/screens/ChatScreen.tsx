@@ -1,19 +1,26 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TextInput, TouchableOpacity, FlatList, StyleSheet, Image, Alert, Platform, KeyboardAvoidingView, Dimensions, Animated, Keyboard } from 'react-native';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { View, Text, TextInput, TouchableOpacity, FlatList, StyleSheet, Image, Alert, Platform, KeyboardAvoidingView, Dimensions, Animated } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
-import { ChevronLeft, Phone, Video, Mic, Plus, SendHorizontal, MoreVertical, Search, X, Square } from 'lucide-react-native';
-import { messageService, deleteMessageService, storageService } from '../services/supabaseService';
+import { ChevronLeft, Phone, Video, Mic, Plus, SendHorizontal, Search, X, Square, MoreVertical, Reply as ReplyIcon } from 'lucide-react-native';
+import { messageService, deleteMessageService, storageService, profileService, messageReactionsService } from '../services/supabaseService';
 import * as ImagePicker from 'expo-image-picker';
 import { Audio } from 'expo-av';
+
 import { supabase } from '../services/supabase';
 import { useAuth } from '../context/AuthContext';
-import { MessageBubble } from '../components/MessageBubble';
+import { MessageBubble, ReplyToMessage } from '../components/MessageBubble';
+import { ImageViewer } from '../components/ImageViewer';
+import { MediaViewer } from '../components/MediaViewer';
 import { useTheme } from '../context/ThemeContext';
 import { useCall } from '../context/CallContext';
 
+import { formatMessageTime, formatDateHeader, getDateKey } from '../utils/date';
+
 const { width, height } = Dimensions.get('window');
+
+type MessageDateGroup = { dateKey: string; messages: any[] };
 
 export const ChatScreen = ({ route, navigation }: any) => {
   const { pairId, partner } = route.params;
@@ -21,7 +28,9 @@ export const ChatScreen = ({ route, navigation }: any) => {
   const { colors, isDark, themeMode } = useTheme();
   const { initiateCall } = useCall();
   const insets = useSafeAreaInsets();
+
   const [messages, setMessages] = useState<any[]>([]);
+  const [groupedMessages, setGroupedMessages] = useState<MessageDateGroup[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(true);
   const [isOnline, setIsOnline] = useState(false);
@@ -29,15 +38,42 @@ export const ChatScreen = ({ route, navigation }: any) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
-  const flatListRef = useRef<FlatList>(null);
+  const [senderName, setSenderName] = useState('');
+
+  // Reply state
+  const [replyingTo, setReplyingTo] = useState<ReplyToMessage | null>(null);
+
+  // ImageViewer state
+  const [imageViewerUri, setImageViewerUri] = useState<string | null>(null);
+
+  // MediaViewer state
+  const [mediaViewerUri, setMediaViewerUri] = useState<string | null>(null);
+  const [mediaViewerType, setMediaViewerType] = useState<'image' | 'video' | 'audio'>('image');
+
+  const flatListRef = useRef<any>(null);
   const typingTimeoutRef = useRef<any>(null);
   const typingChannelRef = useRef<any>(null);
+  const footerRef = useRef<View>(null);
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+
+  // Fetch sender name from user profile
+  useEffect(() => {
+    (async () => {
+      if (user?.id) {
+        const profile = await profileService.getProfile(user.id);
+        if (profile?.name) setSenderName(profile.name);
+      }
+    })();
+  }, []);
 
   useEffect(() => {
     fetchMessages();
-    
+
     // Subscriptions
     const msgChannel = messageService.subscribeToMessages(pairId, (newMessage: any) => {
+      if (newMessage.sender_id !== user!.id) {
+        messageService.markMessageAsRead(newMessage.id);
+      }
       setMessages(prev => [...prev, newMessage]);
     });
 
@@ -49,23 +85,52 @@ export const ChatScreen = ({ route, navigation }: any) => {
       setIsPartnerTyping(typing);
     });
 
-    const keyboardDidShowListener = Keyboard.addListener('keyboardDidShow', () => {
-      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
-    });
-
-    return () => { 
-      supabase.removeChannel(msgChannel); 
+    return () => {
+      supabase.removeChannel(msgChannel);
       supabase.removeChannel(presenceChannel);
       supabase.removeChannel(typingChannelRef.current);
-      keyboardDidShowListener.remove();
     };
   }, [pairId]);
+
+  // Group messages by date whenever messages change
+  useEffect(() => {
+    if (messages.length === 0) { setGroupedMessages([]); return; }
+    const groups: MessageDateGroup[] = [];
+    let currentDateKey = '';
+
+    for (const msg of messages) {
+      const key = getDateKey(msg.created_at);
+      if (key !== currentDateKey) {
+        currentDateKey = key;
+        groups.push({ dateKey: msg.created_at, messages: [msg] });
+      } else {
+        groups[groups.length - 1].messages.push(msg);
+      }
+    }
+
+    setGroupedMessages(groups);
+  }, [messages]);
+
+  // Auto-scroll to bottom when new messages arrive
+  useEffect(() => {
+    if (messages.length > 0) {
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+    }
+  }, [messages.length]);
 
   const fetchMessages = async () => {
     try {
       const data = await messageService.getMessages(pairId);
-      setMessages((data || []).reverse());
-      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 200);
+      // Filter out messages that were hidden by the user ("delete for me")
+      const checked: boolean[] = await Promise.all(
+        (data || []).map(msg => deleteMessageService.isDeletedForMe(msg.id))
+      );
+      const filtered = (data || []).filter((_, i) => !checked[i]);
+      // Auto-mark partner's unread messages as read
+      Promise.all(filtered.filter(msg => !msg.read_at && msg.sender_id !== user!.id).map(msg => messageService.markMessageAsRead(msg.id)));
+      setMessages([...filtered].reverse());
     } catch (error) { console.error('Fetch msgs fail:', error); }
     finally { setLoading(false); }
   };
@@ -73,25 +138,44 @@ export const ChatScreen = ({ route, navigation }: any) => {
   const handleTyping = (text: string) => {
     setInput(text);
     if (!typingChannelRef.current) return;
-    
+
     messageService.sendTypingIndicator(typingChannelRef.current, true);
-    
+
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     typingTimeoutRef.current = setTimeout(() => {
       messageService.sendTypingIndicator(typingChannelRef.current, false);
     }, 2000);
   };
 
-  const sendMessage = async (content: string) => {
-    if (!content.trim()) return;
+  const sendMessage = useCallback(async (content: string, mediaUrl?: string, msgType?: any) => {
+    const trimmed = content?.trim();
+    if (!trimmed && !mediaUrl) return;
     try {
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
       messageService.sendTypingIndicator(typingChannelRef.current, false);
-      
-      await messageService.sendMessage(pairId, content);
+
+      await messageService.sendMessage(pairId, trimmed, mediaUrl, msgType || 'text', replyingTo?.id);
+      setReplyingTo(null);
       setInput('');
       setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
     } catch (error) { console.error('Send message fail:', error); }
+  }, [pairId, replyingTo]);
+
+  const handleImageTap = (uri: string) => {
+    setImageViewerUri(uri);
+  };
+
+  const handleCloseImageViewer = () => {
+    setImageViewerUri(null);
+  };
+
+  const handleMediaTap = (uri: string, type: 'image' | 'video' | 'audio') => {
+    setMediaViewerUri(uri);
+    setMediaViewerType(type);
+  };
+
+  const handleCloseMediaViewer = () => {
+    setMediaViewerUri(null);
   };
 
   const handleAttach = async () => {
@@ -108,7 +192,7 @@ export const ChatScreen = ({ route, navigation }: any) => {
         const blob: any = await response.blob();
         blob.name = asset.uri.split('/').pop() || 'photo.jpg';
         const url = await storageService.uploadFile(blob);
-        await messageService.sendMessage(pairId, '', url, 'image');
+        await sendMessage('', url, 'image');
       }
     } catch (e) {
       console.error(e);
@@ -120,16 +204,26 @@ export const ChatScreen = ({ route, navigation }: any) => {
     try {
       const permission = await Audio.requestPermissionsAsync();
       if (permission.status !== 'granted') return Alert.alert('Permission Denied');
-      
+
       await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
       const { recording: newRecording } = await Audio.Recording.createAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
       setRecording(newRecording);
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, { toValue: 1.25, duration: 800, useNativeDriver: true }),
+          Animated.timing(pulseAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
+        ])
+      ).start();
     } catch (err) { console.error('Failed to start recording', err); }
   };
 
   const stopVoice = async () => {
     if (!recording) return;
     try {
+      Animated.sequence([
+        Animated.timing(pulseAnim, { toValue: 1, duration: 150, useNativeDriver: true }),
+      ]).start();
+
       await recording.stopAndUnloadAsync();
       const uri = recording.getURI();
       setRecording(null);
@@ -138,59 +232,174 @@ export const ChatScreen = ({ route, navigation }: any) => {
         const blob: any = await response.blob();
         blob.name = 'voice.m4a';
         const url = await storageService.uploadFile(blob);
-        await messageService.sendMessage(pairId, '', url, 'audio');
+        await sendMessage('', url, 'audio');
       }
     } catch (error) { console.error(error); }
   };
-
-  const displayMessages = isSearching && searchQuery 
-    ? messages.filter(m => m.content?.toLowerCase().includes(searchQuery.toLowerCase()))
-    : messages;
-
-  const renderBackgroundGlows = () => (
-    <View style={styles.glowOverlay}>
-      <LinearGradient colors={colors.gradientPrimary as any} style={StyleSheet.absoluteFillObject} />
-      {themeMode === 'mocha' && (
-        <>
-          <LinearGradient colors={['rgba(255, 107, 74, 0.15)', 'transparent'] as any} style={[styles.glowBall, { top: height * 0.1, left: -50, width: 300, height: 300 }]} />
-          <LinearGradient colors={['rgba(255, 107, 74, 0.05)', 'transparent'] as any} style={[styles.glowBall, { bottom: height * 0.1, right: -50, width: 350, height: 350 }]} />
-        </>
-      )}
-    </View>
-  );
 
   const getStatusText = () => {
     if (isPartnerTyping) return 'typing...';
     return isOnline ? 'Online' : 'Offline';
   };
 
+  const startReply = (msg: any) => {
+    const senderName = msg.sender_id === user!.id
+      ? 'You'
+      : (partner?.name || 'Partner');
+
+    setReplyingTo({
+      id: msg.id,
+      content: msg.content,
+      senderName,
+      messageType: msg.message_type,
+      mediaUrl: msg.media_url,
+    });
+  };
+
+  const cancelReply = () => {
+    setReplyingTo(null);
+  };
+
+  // Grouped list render
+  const renderMessageGroup = ({ item: group }: { item: MessageDateGroup }) => {
+    return (
+      <>
+        <View style={styles.dateSeparator}>
+          <View style={[styles.datePill, { backgroundColor: 'rgba(128,128,128,0.15)' }]}>
+            <Text style={[styles.dateText, { color: 'rgba(255,255,255,0.5)' }]}>
+              {formatDateHeader(group.dateKey)}
+            </Text>
+          </View>
+        </View>
+        {group.messages.map((msg) => {
+          let replyToMessage: ReplyToMessage | null = null;
+          if (msg.reply_to_message_id) {
+            replyToMessage = {
+              id: msg.reply_to_message_id,
+              content: msg.reply_content,
+              senderName: msg.reply_sender_name || 'Unknown',
+              messageType: msg.reply_message_type,
+            };
+          }
+
+          return (
+            <MessageBubble
+              key={msg.id}
+              content={msg.content}
+              mediaUrl={msg.media_url}
+              messageType={msg.message_type}
+              isMe={msg.sender_id === user!.id}
+              timestamp={msg.created_at}
+              delivered_at={msg.delivered_at}
+              read_at={msg.read_at}
+              onDelete={() => deleteMessageService.deleteForMe(msg.id)}
+              onReply={() => startReply(msg)}
+              replyToMessage={replyToMessage}
+              onImageTap={(uri) => handleImageTap(uri)}
+            />
+          );
+        })}
+      </>
+    );
+  };
+
+  // Search results fallback
+  const filteredMessages = isSearching && searchQuery
+    ? messages.filter(m => m.content?.toLowerCase().includes(searchQuery.toLowerCase()))
+    : messages;
+
+  const renderSearchResultItem = ({ item }: { item: any }) => (
+    <MessageBubble
+      content={item.content}
+      mediaUrl={item.media_url}
+      messageType={item.message_type}
+      isMe={item.sender_id === user!.id}
+      timestamp={item.created_at}
+      delivered_at={item.delivered_at}
+      read_at={item.read_at}
+      onDelete={() => deleteMessageService.deleteForMe(item.id)}
+      onReply={() => startReply(item)}
+      onImageTap={(uri) => handleImageTap(uri)}
+    />
+  );
+
+  const renderEmptyChat = () => (
+    <View style={styles.emptyChat}>
+      <View style={[styles.emptyAvatarWrap, { borderColor: colors.glassBorder }]}>
+        <Image source={{ uri: `https://api.dicebear.com/7.x/avataaars/svg?seed=${partner?.name || 'Partner'}` }} style={styles.emptyAvatar} />
+      </View>
+      <Text style={[styles.emptyTitle, { color: colors.text }]}>
+        Say hello to {partner?.name || 'your partner'}
+      </Text>
+      <Text style={[styles.emptySubtitle, { color: colors.gray }]}>
+        Send your first message to start the conversation
+      </Text>
+    </View>
+  );
+
+  const openChatSettings = () => {
+    navigation.navigate('ChatSettings', { pairId, partner });
+  };
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {renderBackgroundGlows()}
+      {/* Subtle background gradient */}
+      <View style={StyleSheet.absoluteFill}>
+        <LinearGradient colors={colors.gradientPrimary as any} style={StyleSheet.absoluteFill} />
+        {themeMode === 'mocha' && (
+          <>
+            <LinearGradient colors={['rgba(255, 107, 74, 0.08)', 'transparent'] as any} style={[styles.glowBall, { top: height * 0.1, left: -50, width: 200, height: 200 }]} />
+            <LinearGradient colors={['rgba(255, 107, 74, 0.05)', 'transparent'] as any} style={[styles.glowBall, { bottom: height * 0.1, right: -50, width: 200, height: 200 }]} />
+          </>
+        )}
+      </View>
 
-      <KeyboardAvoidingView 
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
-        style={{ flex: 1 }}
-      >
-        <BlurView 
-          intensity={themeMode === 'obsidian' ? 0 : colors.glassBlur} 
-          tint={isDark ? 'dark' : 'light'} 
-          style={[styles.headerGlass, { backgroundColor: themeMode === 'obsidian' ? colors.background : 'transparent', borderBottomColor: colors.glassBorder, borderBottomWidth: colors.borderWidth }]}
+      {/* ImageViewer modal */}
+      {imageViewerUri && (
+        <ImageViewer
+          uri={imageViewerUri}
+          visible={!!imageViewerUri}
+          onClose={handleCloseImageViewer}
+        />
+      )}
+
+      {/* MediaViewer modal */}
+      {mediaViewerUri && (
+        <MediaViewer
+          uri={mediaViewerUri}
+          visible={!!mediaViewerUri}
+          onClose={handleCloseMediaViewer}
+          messageType={mediaViewerType}
+        />
+      )}
+
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+        {/* Header */}
+        <BlurView
+          intensity={themeMode === 'obsidian' ? 10 : colors.glassBlur}
+          tint={isDark ? 'dark' : 'light'}
+          style={[styles.headerBlur, { borderBottomColor: colors.glassBorder, borderBottomWidth: colors.borderWidth > 0 ? colors.borderWidth : 0.5 }]}
         >
           <SafeAreaView edges={['top']} style={styles.headerSafe}>
             <View style={styles.headerContent}>
               <TouchableOpacity onPress={() => navigation.goBack()} style={styles.navBtn}>
                 <ChevronLeft size={28} color={colors.text} strokeWidth={2.5} />
               </TouchableOpacity>
-              
-              <TouchableOpacity activeOpacity={0.7} onPress={() => Alert.alert('Profile', partner?.name)} style={styles.partnerInfo}>
+
+              <TouchableOpacity activeOpacity={0.7} onPress={() => Alert.alert('Profile', partner?.name || 'Partner')} style={styles.partnerInfo}>
                 <View style={styles.avatarWrap}>
                   <Image source={{ uri: `https://api.dicebear.com/7.x/avataaars/svg?seed=${partner?.name || 'Partner'}` }} style={[styles.headerAvatar, { borderRadius: colors.radius.story }]} />
-                  {isOnline && <View style={[styles.onlineDot, { backgroundColor: colors.tertiary, borderColor: colors.background }]} />}
+                  {isOnline && (
+                    <View style={[styles.onlineDot, { backgroundColor: colors.tertiary, borderColor: colors.background }]} />
+                  )}
                 </View>
-                <View>
+                <View style={styles.partnerTextWrap}>
                   <Text style={[styles.headerName, { color: colors.text }]}>{partner?.name || 'Partner'}</Text>
-                  <Text style={[styles.statusTxt, { color: isPartnerTyping ? colors.tertiary : colors.gray, opacity: isOnline || isPartnerTyping ? 1 : 0.6 }]}>
+                  <Text style={[
+                    styles.statusTxt,
+                    { color: isPartnerTyping ? colors.tertiary : colors.gray },
+                    (!isOnline && !isPartnerTyping) && styles.offlineStatus,
+                  ]}>
                     {getStatusText()}
                   </Text>
                 </View>
@@ -202,58 +411,116 @@ export const ChatScreen = ({ route, navigation }: any) => {
                 <TouchableOpacity onPress={() => setIsSearching(!isSearching)} style={styles.actionIcon}>
                   {isSearching ? <X size={22} color={colors.text} /> : <Search size={22} color={colors.text} />}
                 </TouchableOpacity>
+                <TouchableOpacity onPress={openChatSettings} style={styles.actionIcon}><MoreVertical size={20} color={colors.text} /></TouchableOpacity>
               </View>
             </View>
             {isSearching && (
-              <View style={{ paddingHorizontal: 20, paddingBottom: 10 }}>
-                <TextInput
-                  style={[styles.inputPill, { backgroundColor: 'rgba(0,0,0,0.1)', color: colors.text, height: 40 }]}
-                  placeholder="Search in chat..."
-                  placeholderTextColor={colors.gray}
-                  value={searchQuery}
-                  onChangeText={setSearchQuery}
-                  autoFocus
-                />
+              <View style={styles.searchBarRow}>
+                <BlurView
+                  intensity={themeMode === 'obsidian' ? 10 : colors.glassBlur}
+                  tint={isDark ? 'dark' : 'light'}
+                  style={[styles.searchInputBar, { backgroundColor: 'rgba(255,255,255,0.06)', borderColor: colors.glassBorder, borderRadius: 12 }]}
+                >
+                  <Search size={18} color={colors.gray} style={{ marginRight: 8 }} />
+                  <TextInput
+                    style={[styles.searchField, { color: colors.text }]}
+                    placeholder="Search in chat..."
+                    placeholderTextColor={colors.gray}
+                    value={searchQuery}
+                    onChangeText={setSearchQuery}
+                    autoFocus
+                  />
+                  {searchQuery.length > 0 && (
+                    <TouchableOpacity onPress={() => setSearchQuery('')}>
+                      <X size={16} color={colors.gray} />
+                    </TouchableOpacity>
+                  )}
+                </BlurView>
               </View>
             )}
           </SafeAreaView>
         </BlurView>
 
-        <FlatList
-          ref={flatListRef}
-          data={displayMessages}
-          renderItem={({ item }) => (
-            <View style={styles.bubbleRow}>
-              <MessageBubble 
-                content={item.content} 
-                mediaUrl={item.media_url}
-                messageType={item.message_type}
-                isMe={item.sender_id === user!.id} 
-                timestamp={item.created_at}
-                delivered_at={item.delivered_at}
-                read_at={item.read_at}
-                onDelete={() => deleteMessageService.deleteForMe(item.id)}
-              />
-            </View>
-          )}
-          keyExtractor={item => item.id}
-          contentContainerStyle={styles.listInside}
-          showsVerticalScrollIndicator={false}
-          onContentSizeChange={() => messages.length > 0 && flatListRef.current?.scrollToEnd({ animated: true })}
-        />
+        {/* Messages List */}
+        {messages.length > 0 && !isSearching ? (
+          <FlatList<any>
+            ref={flatListRef}
+            data={groupedMessages}
+            renderItem={renderMessageGroup}
+            keyExtractor={(item) => item.dateKey + (item.messages[0]?.id || '')}
+            contentContainerStyle={[styles.listInside, isSearching && { paddingBottom: 0 }]}
+            showsVerticalScrollIndicator={false}
+            ListHeaderComponent={messages.length <= 0 ? renderEmptyChat : null}
+            ListFooterComponent={<View ref={footerRef as any} style={{ height: 8 }} />}
+          />
+        ) : isSearching && searchQuery.length > 0 ? (
+          <FlatList
+            ref={flatListRef}
+            data={filteredMessages}
+            renderItem={renderSearchResultItem}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={styles.listInside}
+            showsVerticalScrollIndicator={false}
+            ListEmptyComponent={
+              <View style={styles.searchEmpty}>
+                <Search size={40} color={colors.gray} strokeWidth={1.5} />
+                <Text style={[styles.searchEmptyText, { color: colors.gray }]}>
+                  No results for "{searchQuery}"
+                </Text>
+              </View>
+            }
+          />
+        ) : (
+          <FlatList<any>
+            ref={flatListRef}
+            data={groupedMessages}
+            renderItem={renderMessageGroup}
+            keyExtractor={(item) => item.dateKey + (item.messages[0]?.id || '')}
+            contentContainerStyle={styles.listInside}
+            showsVerticalScrollIndicator={false}
+            ListEmptyComponent={renderEmptyChat}
+            ListFooterComponent={<View ref={footerRef as any} style={{ height: 8 }} />}
+          />
+        )}
 
-        <View style={[styles.pillWrapper, { paddingBottom: Math.max(insets.bottom, 15) }]}>
-          <BlurView 
-            intensity={themeMode === 'obsidian' ? 0 : colors.glassBlur} 
-            tint={isDark ? 'dark' : 'light'} 
-            style={[styles.inputPill, { 
-              backgroundColor: themeMode === 'obsidian' ? colors.bubbleSentBg : colors.lightGray,
-              borderColor: colors.glassBorder, 
+        {/* Reply preview bar */}
+        {replyingTo && (
+          <View style={[styles.replyPreviewBar, { backgroundColor: 'rgba(128,128,128,0.1)', borderTopColor: colors.primary, borderTopWidth: 2 }]}>
+            <View style={[styles.replyAccentBar, { backgroundColor: colors.primary }]} />
+            <View style={styles.replyContent}>
+              <Text style={[styles.replyName, { color: colors.primary }]} numberOfLines={1}>{replyingTo.senderName}</Text>
+              <Text style={[styles.replyText, { color: colors.gray }]} numberOfLines={1}>
+                {replyingTo.messageType === 'image' ? '📷 Photo' : replyingTo.messageType === 'audio' ? '🎤 Voice message' : replyingTo.content}
+              </Text>
+            </View>
+            <TouchableOpacity onPress={cancelReply} style={styles.replyCancelBtn}>
+              <X size={18} color={colors.gray} />
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Input Bar */}
+        <View style={[styles.pillWrapper, { paddingBottom: Math.max(insets.bottom, 10) }]}>
+          {recording && (
+            <Animated.View style={[styles.recordingIndicator, { transform: [{ scale: pulseAnim }] }]}>
+              <View style={[styles.recordingDot, { backgroundColor: '#FF3B30' }]} />
+              <Text style={styles.recordingText}>Recording... Tap mic to stop</Text>
+            </Animated.View>
+          )}
+
+          <BlurView
+            intensity={themeMode === 'obsidian' ? 10 : colors.glassBlur}
+            tint={isDark ? 'dark' : 'light'}
+            style={[styles.inputBar, {
+              backgroundColor: themeMode === 'obsidian' ? colors.bubbleSentBg : 'rgba(255,255,255,0.05)',
+              borderColor: colors.glassBorder,
               borderWidth: colors.borderWidth,
-              borderRadius: colors.radius.pill
             }]}
           >
-            <TouchableOpacity onPress={handleAttach} style={styles.pillAction}><Plus size={24} color={colors.gray} /></TouchableOpacity>
+            <TouchableOpacity onPress={handleAttach} style={styles.pillAction}>
+              <Plus size={22} color={colors.primary} strokeWidth={2} />
+            </TouchableOpacity>
+
             <TextInput
               style={[styles.inputField, { color: colors.text }]}
               placeholder="Type a message..."
@@ -261,16 +528,16 @@ export const ChatScreen = ({ route, navigation }: any) => {
               value={input}
               onChangeText={handleTyping}
               multiline
+              maxLength={2000}
             />
+
             {input.trim() ? (
-              <TouchableOpacity style={styles.sendBtn} onPress={() => sendMessage(input)}>
-                <LinearGradient colors={colors.gradientSecondary as any} style={styles.sendGrad}>
-                  <SendHorizontal size={20} color="white" strokeWidth={2.5} />
-                </LinearGradient>
+              <TouchableOpacity style={[styles.sendBtn, { backgroundColor: colors.primary }]} onPress={() => sendMessage(input)}>
+                <SendHorizontal size={18} color="white" strokeWidth={2.5} />
               </TouchableOpacity>
             ) : (
               <TouchableOpacity onPress={recording ? stopVoice : startVoice} style={styles.pillAction}>
-                 {recording ? <Square size={24} color={colors.tertiary} fill={colors.tertiary} /> : <Mic size={24} color={colors.gray} />}
+                {recording ? <Square size={20} color="#FF3B30" fill="#FF3B30" /> : <Mic size={22} color={colors.primary} strokeWidth={1.5} />}
               </TouchableOpacity>
             )}
           </BlurView>
@@ -282,26 +549,63 @@ export const ChatScreen = ({ route, navigation }: any) => {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  glowOverlay: { ...StyleSheet.absoluteFillObject, overflow: 'hidden' },
-  glowBall: { position: 'absolute', borderRadius: 200 },
-  headerGlass: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10 },
+  glowBall: { position: 'absolute', borderRadius: 100, overflow: 'hidden' },
+
+  // Header
+  headerBlur: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10 },
   headerSafe: { paddingTop: 10 },
-  headerContent: { flexDirection: 'row', alignItems: 'center', height: 74, paddingHorizontal: 20, justifyContent: 'space-between' },
-  navBtn: { width: 44, height: 44, justifyContent: 'center' },
-  partnerInfo: { flexDirection: 'row', alignItems: 'center', flex: 1, marginLeft: 5 },
-  avatarWrap: { position: 'relative', marginRight: 15 },
-  headerAvatar: { width: 42, height: 42, borderRadius: 12 },
-  onlineDot: { position: 'absolute', bottom: -2, right: -2, width: 12, height: 12, borderRadius: 6, borderWidth: 2 },
-  headerName: { fontSize: 16, fontWeight: '800' },
-  statusTxt: { fontSize: 11, fontWeight: '700' },
-  headerActions: { flexDirection: 'row', gap: 5 },
-  actionIcon: { width: 40, height: 44, justifyContent: 'center', alignItems: 'center' },
-  listInside: { paddingHorizontal: 20, paddingTop: 130, paddingBottom: 20 },
-  bubbleRow: { marginBottom: 12 },
-  pillWrapper: { paddingHorizontal: 20, paddingTop: 10 },
-  inputPill: { height: 60, borderRadius: 30, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 10, elevation: 5 },
-  pillAction: { width: 44, height: 44, justifyContent: 'center', alignItems: 'center' },
-  inputField: { flex: 1, paddingHorizontal: 12, fontSize: 15, fontWeight: '600', maxHeight: 100 },
-  sendBtn: { width: 44, height: 44, borderRadius: 22, overflow: 'hidden' },
-  sendGrad: { flex: 1, justifyContent: 'center', alignItems: 'center' }
+  headerContent: { flexDirection: 'row', alignItems: 'center', height: 64, paddingHorizontal: 12, justifyContent: 'space-between' },
+  navBtn: { width: 40, height: 40, justifyContent: 'center', alignItems: 'center' },
+  partnerInfo: { flexDirection: 'row', alignItems: 'center', flex: 1, marginLeft: 2 },
+  avatarWrap: { position: 'relative', marginRight: 12 },
+  headerAvatar: { width: 38, height: 38 },
+  onlineDot: { position: 'absolute', bottom: 0, right: 0, width: 12, height: 12, borderRadius: 6, borderWidth: 2 },
+  partnerTextWrap: { justifyContent: 'center' },
+  headerName: { fontSize: 16, fontWeight: '700' },
+  statusTxt: { fontSize: 12, fontWeight: '500' },
+  offlineStatus: { opacity: 0.5 },
+  headerActions: { flexDirection: 'row', gap: 2 },
+  actionIcon: { width: 40, height: 40, justifyContent: 'center', alignItems: 'center' },
+
+  // Search bar
+  searchBarRow: { paddingHorizontal: 12, paddingBottom: 10 },
+  searchInputBar: { height: 40, borderRadius: 12, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, overflow: 'hidden' },
+  searchField: { flex: 1, fontSize: 14 },
+
+  // List
+  listInside: { paddingTop: 80, paddingHorizontal: 4 },
+
+  // Date separator (WhatsApp-style pill)
+  dateSeparator: { alignItems: 'center', marginVertical: 12, marginHorizontal: 8 },
+  datePill: { paddingHorizontal: 14, paddingVertical: 5, borderRadius: 10 },
+  dateText: { fontSize: 12, fontWeight: '600' },
+
+  // Reply preview bar
+  replyPreviewBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, marginHorizontal: 8, borderRadius: 12, marginBottom: 4 },
+  replyAccentBar: { width: 4, height: '100%', borderRadius: 2, position: 'absolute', left: 0, top: 0 },
+  replyContent: { flex: 1, gap: 2 },
+  replyName: { fontSize: 12, fontWeight: '600' },
+  replyText: { fontSize: 13 },
+  replyCancelBtn: { padding: 6 },
+
+  // Input bar
+  pillWrapper: { paddingHorizontal: 8, paddingTop: 8 },
+  recordingIndicator: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 6 },
+  recordingDot: { width: 8, height: 8, borderRadius: 4, marginRight: 8 },
+  recordingText: { color: '#FF3B30', fontSize: 13, fontWeight: '600' },
+  inputBar: { borderRadius: 24, flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: 8, paddingVertical: 6, overflow: 'hidden' },
+  pillAction: { width: 36, height: 40, justifyContent: 'center', alignItems: 'center' },
+  inputField: { flex: 1, paddingHorizontal: 8, fontSize: 15, fontWeight: '400', maxHeight: 100, minHeight: 36, textAlignVertical: 'center' },
+  sendBtn: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center', margin: 2 },
+
+  // Empty chat
+  emptyChat: { alignItems: 'center', justifyContent: 'center', paddingVertical: 80, paddingHorizontal: 40 },
+  emptyAvatarWrap: { width: 100, height: 100, borderRadius: 50, overflow: 'hidden', borderWidth: 3, marginBottom: 20 },
+  emptyAvatar: { width: '100%', height: '100%' },
+  emptyTitle: { fontSize: 20, fontWeight: '700', marginBottom: 8, textAlign: 'center' },
+  emptySubtitle: { fontSize: 14, textAlign: 'center' },
+
+  // Search empty
+  searchEmpty: { alignItems: 'center', justifyContent: 'center', paddingVertical: 60, gap: 12, opacity: 0.6 },
+  searchEmptyText: { fontSize: 15, textAlign: 'center' },
 });
