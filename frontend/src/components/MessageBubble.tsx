@@ -1,6 +1,7 @@
-import React, { memo } from 'react';
+import React, { useState, useRef, useEffect, memo } from 'react';
 import { View, Text, TouchableOpacity, Image, Alert, StyleSheet, Platform, Linking } from 'react-native';
-import { Check, CheckCheck, PlayCircle, X, Reply } from 'lucide-react-native';
+import { Check, CheckCheck, Play, Pause, Reply } from 'lucide-react-native';
+import { Audio } from 'expo-av';
 import { useTheme } from '../context/ThemeContext';
 import { formatMessageTime } from '../utils/date';
 
@@ -24,6 +25,7 @@ interface MessageBubbleProps {
   messageType?: 'text' | 'image' | 'video' | 'audio';
   replyToMessage?: ReplyToMessage | null;
   onImageTap?: (uri: string) => void;
+  onMediaTap?: (uri: string, type: 'image' | 'video' | 'audio') => void;
 }
 
 // URL detection regex
@@ -61,9 +63,15 @@ export const MessageBubble: React.FC<MessageBubbleProps> = memo(
   function MessageBubble({
     content, isMe, timestamp, delivered_at, read_at,
     onDelete, onReply, mediaUrl, messageType,
-    replyToMessage, onImageTap,
+    replyToMessage, onImageTap, onMediaTap,
   }) {
     const { colors } = useTheme();
+
+    // Audio playback state
+    const [isPlaying, setIsPlaying] = useState(false);
+    const [progress, setProgress] = useState(0);
+    const [duration, setDuration] = useState(0);
+    const soundRef = useRef<Audio.Sound | null>(null);
 
     const isEmojiOnly = content
       ? /^[\p{Emoji_Presentation}\p{Extended_Pictographic}]{1,8}$/u.test(content.trim())
@@ -119,6 +127,75 @@ export const MessageBubble: React.FC<MessageBubbleProps> = memo(
       }
     };
 
+    const handleVideoTap = () => {
+      if (mediaUrl && onMediaTap) {
+        onMediaTap(mediaUrl, 'video');
+      }
+    };
+
+    const handleAudioTap = () => {
+      if (!mediaUrl) return;
+      if (isPlaying) {
+        pauseAudio();
+      } else {
+        playAudio();
+      }
+    };
+
+    const playAudio = async () => {
+      if (!mediaUrl) return;
+      try {
+        // Stop any previous sound
+        if (soundRef.current) {
+          await soundRef.current.unloadAsync();
+          soundRef.current = null;
+        }
+
+        const { sound } = await Audio.Sound.createAsync(
+          { uri: mediaUrl },
+          { shouldPlay: true },
+          (status) => {
+            if (status.isLoaded) {
+              setProgress(status.positionMillis || 0);
+              if (status.durationMillis) setDuration(status.durationMillis);
+              if (status.didJustFinish) {
+                setIsPlaying(false);
+                setProgress(0);
+              }
+            }
+          }
+        );
+        soundRef.current = sound;
+        setIsPlaying(true);
+      } catch (error) {
+        console.error('Failed to play audio:', error);
+      }
+    };
+
+    const pauseAudio = async () => {
+      if (soundRef.current) {
+        await soundRef.current.pauseAsync();
+        setIsPlaying(false);
+      }
+    };
+
+    const formatTime = (ms: number) => {
+      const totalSec = Math.floor(ms / 1000);
+      const min = Math.floor(totalSec / 60);
+      const sec = totalSec % 60;
+      return `${min}:${sec.toString().padStart(2, '0')}`;
+    };
+
+    // Cleanup audio when component unmounts
+    useEffect(() => {
+      return () => {
+        if (soundRef.current) {
+          soundRef.current.unloadAsync();
+          soundRef.current = null;
+        }
+      };
+    }, []);
+
     const renderQuotedMessage = () => {
       if (!replyToMessage) return null;
       return (
@@ -130,9 +207,11 @@ export const MessageBubble: React.FC<MessageBubbleProps> = memo(
             </Text>
           </View>
           {replyToMessage.messageType === 'image' ? (
-            <Text style={[styles.quoteText, { color: colors.gray }]} numberOfLines={1}>📷 Photo</Text>
+            <Text style={[styles.quoteText, { color: colors.gray }]} numberOfLines={1}>Photo</Text>
           ) : replyToMessage.messageType === 'audio' ? (
-            <Text style={[styles.quoteText, { color: colors.gray }]} numberOfLines={1}>🎤 Voice message</Text>
+            <Text style={[styles.quoteText, { color: colors.gray }]} numberOfLines={1}>Voice message</Text>
+          ) : replyToMessage.messageType === 'video' ? (
+            <Text style={[styles.quoteText, { color: colors.gray }]} numberOfLines={1}>Video</Text>
           ) : (
             <Text style={[styles.quoteText, { color: colors.gray }]} numberOfLines={1}>
               {replyToMessage.content}
@@ -163,6 +242,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = memo(
       );
     };
 
+    const progressPercent = duration > 0 ? Math.min(progress / duration, 1) : 0;
+
     return (
       <View style={[styles.outer, { alignItems: isMe ? 'flex-end' : 'flex-start' }]}>
         <TouchableOpacity
@@ -187,7 +268,19 @@ export const MessageBubble: React.FC<MessageBubbleProps> = memo(
           {messageType === 'image' && mediaUrl && (
             <TouchableOpacity activeOpacity={0.9} onPress={handleImageTap}>
               <View style={styles.mediaContainer}>
-                <Image source={{ uri: mediaUrl }} style={[styles.mediaImage, isEmojiOnly ? styles.emojiOnlyImage : null]} />
+                <Image source={{ uri: mediaUrl }} style={[styles.mediaImage, isEmojiOnly ? styles.emojiOnlyImage : null]} resizeMode="cover" />
+              </View>
+            </TouchableOpacity>
+          )}
+
+          {/* Video message */}
+          {messageType === 'video' && mediaUrl && (
+            <TouchableOpacity activeOpacity={0.8} onPress={handleVideoTap}>
+              <View style={[styles.videoThumbnail, isMe ? { backgroundColor: 'rgba(128,128,128,0.2)' } : { backgroundColor: 'rgba(128,128,128,0.15)' }]}>
+                <Image source={{ uri: mediaUrl }} style={styles.videoThumbnailImage} resizeMode="cover" />
+                <View style={styles.playOverlay}>
+                  <Play size={32} color="white" strokeWidth={2} />
+                </View>
               </View>
             </TouchableOpacity>
           )}
@@ -195,14 +288,27 @@ export const MessageBubble: React.FC<MessageBubbleProps> = memo(
           {/* Audio/Voice message */}
           {messageType === 'audio' && mediaUrl ? (
             <View style={styles.audioContainer}>
-              <View style={[styles.audioBubble, { borderColor: isMe ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.15)' }]}>
-                <PlayCircle size={24} color={isMe ? colors.primary : 'white'} />
-                <View style={styles.audioProgress}>
-                  <View style={styles.audioProgressTrack} />
-                  <View style={styles.audioProgressThumb} />
+              <TouchableOpacity
+                activeOpacity={0.7}
+                onPress={handleAudioTap}
+                style={[styles.audioBubble, { borderColor: isMe ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.15)' }]}
+              >
+                <View style={[styles.playBtn, { backgroundColor: isMe ? colors.primary : 'rgba(255,255,255,0.2)' }]}>
+                  {isPlaying ? (
+                    <Pause size={16} color="white" />
+                  ) : (
+                    <Play size={16} color="white" />
+                  )}
                 </View>
-                <Text style={[styles.audioDuration, { color: isMe ? 'rgba(255,255,255,0.6)' : 'rgba(255,255,255,0.8)' }]}>0:0</Text>
-              </View>
+                <View style={styles.audioProgressWrap}>
+                  <View style={styles.audioProgressTrack}>
+                    <View style={[styles.audioProgressFill, { width: `${progressPercent * 100}%` }]} />
+                  </View>
+                </View>
+                <Text style={[styles.audioDuration, { color: isMe ? 'rgba(255,255,255,0.6)' : 'rgba(255,255,255,0.8)' }]}>
+                  {duration > 0 ? formatTime(duration) : '--:--'}
+                </Text>
+              </TouchableOpacity>
             </View>
           ) : null}
 
@@ -308,6 +414,36 @@ const styles = StyleSheet.create({
     borderRadius: 0,
     backgroundColor: 'transparent',
   },
+
+  // Video thumbnail
+  videoThumbnail: {
+    width: 200,
+    height: 150,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden',
+    marginHorizontal: -14,
+    marginTop: -8,
+    marginBottom: 2,
+  },
+  videoThumbnailImage: {
+    position: 'absolute',
+    width: '100%',
+    height: '100%',
+    borderRadius: 12,
+  },
+  playOverlay: {
+    position: 'absolute',
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  // Audio
   audioContainer: {
     marginVertical: 4,
     marginBottom: 10,
@@ -320,30 +456,33 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.15)',
+    minWidth: 160,
   },
-  audioProgress: {
+  playBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  audioProgressWrap: {
     flex: 1,
-    marginHorizontal: 12,
+    marginHorizontal: 10,
+    height: 24,
+    justifyContent: 'center',
+  },
+  audioProgressTrack: {
     height: 3,
     borderRadius: 1.5,
     backgroundColor: 'rgba(255,255,255,0.15)',
   },
-  audioProgressTrack: {
-    width: '60%',
+  audioProgressFill: {
     height: 3,
     borderRadius: 1.5,
-  },
-  audioProgressThumb: {
-    position: 'absolute',
-    left: '60%',
-    top: -4,
-    height: 11,
-    backgroundColor: 'white',
+    backgroundColor: 'rgba(255,255,255,0.7)',
   },
   audioDuration: {
     fontSize: 12,
-    position: 'absolute',
-    left: '50%',
   },
 
   // Quote/Reply preview

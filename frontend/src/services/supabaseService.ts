@@ -139,17 +139,43 @@ export const inviteService = {
     try {
       const { data: invite, error: inviteError } = await supabase.from('invites').select('*').eq('token', token).single();
       if (inviteError) throw inviteError;
-      
+
+      if (invite.accepted_at) {
+        throw new Error('This invite has already been accepted.');
+      }
+
+      if (new Date(invite.expires_at) < new Date()) {
+        throw new Error('This invite has expired. Ask your partner to resend.');
+      }
+
       const currentUser = await authService.getCurrentUser();
       if (!currentUser) throw new Error('Auth required');
-      
+
       const { data: pair, error: pairError } = await supabase
         .from('pairs')
         .insert({ user_a_id: invite.inviter_id, user_b_id: currentUser.id, status: 'active' })
         .select(`*, user_a:users!pairs_user_a_id_fkey(*), user_b:users!pairs_user_b_id_fkey(*)`)
         .single();
-      
-      if (pairError) throw pairError;
+
+      if (pairError) {
+        if ((pairError as any).code === '23505') {
+          const existingPair = await supabase
+            .from('pairs')
+            .select(`*, user_a:users!pairs_user_a_id_fkey(*), user_b:users!pairs_user_b_id_fkey(*)`)
+            .or(
+              `user_a_id.eq.${invite.inviter_id},and(user_a_id.eq.${invite.inviter_id},user_b_id.eq.${currentUser.id})`
+            )
+            .or(`user_a_id.eq.${currentUser.id},user_b_id.eq.${currentUser.id}`)
+            .eq('status', 'active')
+            .maybeSingle();
+
+          if (existingPair.data) {
+            await supabase.from('invites').update({ accepted_at: new Date().toISOString() }).eq('id', invite.id);
+            return existingPair.data;
+          }
+        }
+        throw pairError;
+      }
       await supabase.from('invites').update({ accepted_at: new Date().toISOString() }).eq('id', invite.id);
       return pair;
     } catch (error) {
@@ -170,7 +196,10 @@ export const inviteService = {
         .gt('expires_at', new Date().toISOString());
       if (error) throw error;
       return data || [];
-    } catch (error) { return []; }
+    } catch (error) {
+      console.error('getPendingInvites error:', error);
+      return [];
+    }
   },
 
   async getMyPairs() {
@@ -188,9 +217,9 @@ export const inviteService = {
         `)
         .or(`user_a_id.eq.${user.id},user_b_id.eq.${user.id}`)
         .eq('status', 'active');
-      
+
       if (error) throw error;
-      
+
       // Sort and pick latest message + calculate unread count for each
       return (data || []).map((p: any) => {
           const sortedMsgs = p.messages.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
@@ -198,7 +227,8 @@ export const inviteService = {
           return { ...p, last_message: sortedMsgs[0] || null, unread_count: unread };
       });
     } catch (error) {
-      return [];
+      console.error('getMyPairs error:', error);
+      throw error;
     }
   },
 
@@ -226,8 +256,9 @@ export const messageService = {
       const { data, error } = await supabase.from('messages').select('*').eq('pair_id', pairId).order('created_at', { ascending: false }).range(offset, offset + limit - 1);
       if (error) throw error;
       return data || [];
-    } catch (error) { 
-      return []; 
+    } catch (error) {
+      console.error('getMessages error:', error);
+      throw error;
     }
   },
 
@@ -254,13 +285,17 @@ export const messageService = {
   async markMessageAsRead(messageId: string) {
     try {
       await supabase.from('messages').update({ read_at: new Date().toISOString() }).eq('id', messageId);
-    } catch (error) {}
+    } catch (error) {
+      console.error('markMessageAsRead error:', error);
+    }
   },
 
   async markMessagesAsDelivered(messageIds: string[]) {
     try {
       await supabase.from('messages').update({ delivered_at: new Date().toISOString() }).in('id', messageIds);
-    } catch (error) {}
+    } catch (error) {
+      console.error('markMessagesAsDelivered error:', error);
+    }
   },
 
   subscribeToMessages(pairId: string, callback: (message: any) => void) {
@@ -300,9 +335,27 @@ export const storageService = {
     try {
       const user = await authService.getCurrentUser();
       if (!user) throw new Error('Auth required');
+
+      let fileName: string;
+      let contentType: string | undefined = file.type;
+
+      // Handle file URI objects (from camera/audio recording)
+      if (file.uri) {
+        const ext = file.name?.split('.').pop() ||
+                    file.uri.split('.').pop() ||
+                    'bin';
+        fileName = `${user.id}/${Date.now()}.${ext}`;
+        const { data, error } = await supabase.storage.from(bucket).upload(fileName, file as any);
+        if (error) throw error;
+        return supabase.storage.from(bucket).getPublicUrl(fileName).data.publicUrl;
+      }
+
+      // Handle Blob files (from ImagePicker)
       const ext = file.name ? file.name.split('.').pop() : 'bin';
-      const fileName = `${user.id}/${Date.now()}.${ext}`;
-      const { data, error } = await supabase.storage.from(bucket).upload(fileName, file);
+      fileName = `${user.id}/${Date.now()}.${ext}`;
+      const { data, error } = await supabase.storage.from(bucket).upload(fileName, file, {
+        contentType: contentType || undefined,
+      });
       if (error) throw error;
       return supabase.storage.from(bucket).getPublicUrl(fileName).data.publicUrl;
     } catch (error) { throw error; }
@@ -361,6 +414,21 @@ export const deleteMessageService = {
       const { data } = await supabase.from('deleted_messages').select('id').eq('message_id', messageId).eq('user_id', user.id).maybeSingle();
       return !!data;
     } catch (error) { return false; }
+  },
+
+  async getDeletedIdsForUser(userId: string, messageIds: string[]): Promise<Set<string>> {
+    try {
+      if (!messageIds.length) return new Set();
+      const { data } = await supabase
+        .from('deleted_messages')
+        .select('message_id')
+        .eq('user_id', userId)
+        .in('message_id', messageIds);
+      return new Set((data || []).map((d: any) => d.message_id));
+    } catch (error) {
+      console.error('getDeletedIdsForUser error:', error);
+      return new Set();
+    }
   }
 };
 

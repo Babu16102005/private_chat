@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, TextInput, SafeAreaView, Dimensions, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, TextInput, SafeAreaView, Dimensions, ActivityIndicator, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Moon, Search, Plus, MessageCircle, Droplets, X, Check, CheckCheck } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -17,47 +17,121 @@ export const HomeScreen = ({ navigation }: any) => {
   const { colors, isDark, themeMode, toggleTheme } = useTheme();
   const insets = useSafeAreaInsets();
 
-  if (!user) return null;
-
   const [chats, setChats] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [onlineStatus, setOnlineStatus] = useState<Record<string, boolean>>({});
   const [typingStatus, setTypingStatus] = useState<Record<string, boolean>>({});
 
-  const channelsRef = useRef<any[]>([]);
+  // Track active subscriptions by pair ID to prevent duplicates
+  const subscriptionsRef = useRef<Map<string, any[]>>(new Map());
+  const isMountedRef = useRef(true);
 
+  // Cleanup on unmount
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      // Clean up all subscriptions
+      subscriptionsRef.current.forEach((subs) => {
+        subs.forEach(ch => supabase.removeChannel(ch));
+      });
+      subscriptionsRef.current.clear();
+    };
+  }, []);
+
+  // Cleanup individual pair subscriptions when chats change
+  const cleanupPairSubscriptions = useCallback((chatIds: string[]) => {
+    const currentIds = new Set(subscriptionsRef.current.keys());
+    const newIds = new Set(chatIds);
+
+    // Remove subscriptions for pairs no longer in the list
+    currentIds.forEach(id => {
+      if (!newIds.has(id)) {
+        const subs = subscriptionsRef.current.get(id);
+        if (subs) {
+          subs.forEach(ch => supabase.removeChannel(ch));
+        }
+        subscriptionsRef.current.delete(id);
+      }
+    });
+  }, []);
+
+  // Setup subscriptions for a specific pair
+  const setupPairSubscriptions = useCallback((chat: any, userId: string) => {
+    // Remove existing subscriptions for this pair if any
+    const existing = subscriptionsRef.current.get(chat.id);
+    if (existing) {
+      existing.forEach(ch => supabase.removeChannel(ch));
+    }
+
+    const subs: any[] = [];
+    const presenceChannel = messageService.subscribeToPresence(chat.id, userId, (isOnline: boolean) => {
+      if (isMountedRef.current) {
+        setOnlineStatus(prev => ({ ...prev, [chat.id]: isOnline }));
+      }
+    });
+    subs.push(presenceChannel);
+
+    const typingChannel = messageService.subscribeToTyping(chat.id, userId, (isTyping: boolean) => {
+      if (isMountedRef.current) {
+        setTypingStatus(prev => ({ ...prev, [chat.id]: isTyping }));
+      }
+    });
+    subs.push(typingChannel);
+
+    subscriptionsRef.current.set(chat.id, subs);
+  }, []);
+
+  const fetchChats = useCallback(async () => {
+    if (!user?.id) return;
+    try {
+      setLoading(true);
+      const data = await inviteService.getMyPairs();
+      if (isMountedRef.current) {
+        setChats(data || []);
+      }
+    } catch (error) {
+      console.error('Fetch chats failed:', error);
+      if (isMountedRef.current) {
+        Alert.alert('Error', 'Failed to load conversations. Please try again.');
+      }
+    } finally {
+      if (isMountedRef.current) {
+        setLoading(false);
+      }
+    }
+  }, [user]);
+
+  // Fetch chats when user becomes available
   useEffect(() => {
     if (user?.id) {
       fetchChats();
     }
-  }, [user]);
+  }, [user?.id, fetchChats]);
 
+  // Manage subscriptions when chats change - only setup new, remove stale
   useEffect(() => {
-    if (chats.length === 0 || !user?.id) return;
+    if (!user?.id || chats.length === 0) return;
 
-    channelsRef.current = chats.flatMap(chat => [
-      messageService.subscribeToPresence(chat.id, user!.id, (isOnline: boolean) => {
-        setOnlineStatus(prev => ({ ...prev, [chat.id]: isOnline }));
-      }),
-      messageService.subscribeToTyping(chat.id, user!.id, (isTyping: boolean) => {
-        setTypingStatus(prev => ({ ...prev, [chat.id]: isTyping }));
-      }),
-    ]);
+    // Clean up subscriptions for pairs no longer in the list
+    const chatIds = chats.map(c => c.id);
+    cleanupPairSubscriptions(chatIds);
 
-    return () => {
-      channelsRef.current.forEach(ch => supabase.removeChannel(ch));
-      channelsRef.current = [];
-    };
-  }, [chats]);
+    // Set up subscriptions for pairs that don't have them yet
+    chats.forEach(chat => {
+      if (!subscriptionsRef.current.has(chat.id)) {
+        setupPairSubscriptions(chat, user.id);
+      }
+    });
+  }, [chats, user?.id, cleanupPairSubscriptions, setupPairSubscriptions]);
 
-  const fetchChats = async () => {
-    try {
-      const data = await inviteService.getMyPairs();
-      setChats(data || []);
-    } catch (error) { console.error('Fetch chats fail:', error); }
-    finally { setLoading(false); }
-  };
+  // Pull-to-refresh handler
+  const handleRefresh = useCallback(() => {
+    fetchChats();
+  }, [fetchChats]);
+
+  if (!user) return null;
 
   const filteredChats = chats.filter(chat => {
     const partner = chat.user_a?.id === user!.id ? chat.user_b : chat.user_a;
@@ -204,6 +278,8 @@ export const HomeScreen = ({ navigation }: any) => {
             renderItem={renderChatItem}
             contentContainerStyle={styles.listInside}
             showsVerticalScrollIndicator={false}
+            onRefresh={handleRefresh}
+            refreshing={loading}
             ListEmptyComponent={
               <View style={styles.emptyWrap}>
                 <MessageCircle size={40} color={colors.gray} strokeWidth={1.5} />

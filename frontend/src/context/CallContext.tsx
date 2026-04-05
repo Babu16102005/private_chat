@@ -90,7 +90,11 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const resetCallState = useCallback(() => {
     if (pc.current) {
-      pc.current.close();
+      try {
+        pc.current.close();
+      } catch (e) {
+        console.warn('Error closing peer connection:', e);
+      }
       pc.current = null;
     }
 
@@ -108,7 +112,11 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     setLocalStream((currentStream: any) => {
       if (currentStream) {
-        currentStream.getTracks().forEach((track: any) => track.stop());
+        try {
+          currentStream.getTracks().forEach((track: any) => track.stop());
+        } catch (e) {
+          console.warn('Error stopping media tracks:', e);
+        }
       }
       return null;
     });
@@ -143,46 +151,55 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!user) return;
 
     const globalChannel = supabase.channel(`calls:${user.id}`)
-      .on('broadcast', { event: 'call-offer' }, async ({ payload }: any) => {
-        if (!payload || payload.senderInfo?.id === user.id) return;
+      .on('broadcast', { event: '*' }, async ({ payload }: any) => {
+        if (!payload) return;
 
-        if (callStateRef.current !== 'IDLE') {
-          return;
+        const eventType = payload.type || '';
+
+        switch (eventType) {
+          case 'call-offer':
+            if (payload.senderInfo?.id === user.id) return;
+            if (callStateRef.current !== 'IDLE') return;
+
+            setPartnerInfo(payload.senderInfo);
+            setActivePairId(payload.pairId);
+            setRemoteSdp(payload.sdp);
+            setIsIncoming(true);
+            setIsVideoCall(!!payload.isVideo);
+            setIsCameraOff(!payload.isVideo);
+            setCallState('RINGING');
+            break;
+
+          case 'ice-candidate':
+            if (!pc.current || !payload.candidate) return;
+            try {
+              await pc.current.addIceCandidate(new RTCIceCandidateImpl(payload.candidate));
+            } catch (error) {
+              console.error('Failed to add ICE candidate:', error);
+            }
+            break;
+
+          case 'call-answer':
+            if (!pc.current || !payload.sdp) return;
+            try {
+              await pc.current.setRemoteDescription(new RTCSessionDescriptionImpl(payload.sdp));
+              setCallState('CONNECTED');
+            } catch (error) {
+              console.error('Failed to set remote answer:', error);
+            }
+            break;
+
+          case 'call-hangup':
+            cleanup();
+            break;
+
+          default:
+            break;
         }
-
-        setPartnerInfo(payload.senderInfo);
-        setActivePairId(payload.pairId);
-        setRemoteSdp(payload.sdp);
-        setIsIncoming(true);
-        setIsVideoCall(!!payload.isVideo);
-        setIsCameraOff(!payload.isVideo);
-        setCallState('RINGING');
-      })
-      .on('broadcast', { event: 'ice-candidate' }, async ({ payload }: any) => {
-        if (!pc.current || !payload?.candidate) return;
-
-        try {
-          await pc.current.addIceCandidate(new RTCIceCandidateImpl(payload.candidate));
-        } catch (error) {
-          console.error('Failed to add ICE candidate:', error);
-        }
-      })
-      .on('broadcast', { event: 'call-answer' }, async ({ payload }: any) => {
-        if (!pc.current || !payload?.sdp) return;
-
-        try {
-          await pc.current.setRemoteDescription(new RTCSessionDescriptionImpl(payload.sdp));
-          setCallState('CONNECTED');
-        } catch (error) {
-          console.error('Failed to set remote answer:', error);
-        }
-      })
-      .on('broadcast', { event: 'call-hangup' }, () => {
-        cleanup();
       })
       .subscribe((status: string) => {
         if (status === 'CHANNEL_ERROR') {
-          console.error('Incoming call channel error for user:', user.id);
+          console.warn('Call channel disconnected — will attempt auto-reconnect...');
         }
       });
 
@@ -277,7 +294,15 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
     } catch (error: any) {
       console.error('Call start failed:', error);
-      Alert.alert('Call failed', error?.message || 'Could not start the call.');
+      const msg = error?.message || 'Could not start the call.';
+      if (msg.includes('WebRTC is not available')) {
+        Alert.alert('Call feature unavailable',
+          'Video/audio calls require a custom dev build with native modules.\n\n' +
+          'Build the app with: npx expo run:android\n\n' +
+          'Alternatively, install a preview build via EAS.');
+      } else {
+        Alert.alert('Call failed', msg);
+      }
       cleanup();
     }
   };

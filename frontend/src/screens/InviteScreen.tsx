@@ -20,20 +20,6 @@ export const InviteScreen = () => {
   const [pairEmail, setPairEmail] = useState('');
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => { if (route.params?.token) { handleAcceptInvite(route.params.token); } }, [route.params?.token]);
-
-  useEffect(() => {
-    const handleDeepLink = (event: { url: string }) => {
-      const { url } = event;
-      if (url.includes('token=')) {
-        const token = url.split('token=')[1];
-        if (token) handleAcceptInvite(token);
-      }
-    };
-    const sub = Linking.addEventListener('url', handleDeepLink);
-    return () => { if (sub) sub.remove(); };
-  }, []);
-
   const handleAcceptInvite = async (token: string) => {
     if (loading) return;
     setLoading(true);
@@ -47,6 +33,20 @@ export const InviteScreen = () => {
     } catch (error: any) { handleError(error, 'Invite error'); }
     finally { setLoading(false); }
   };
+
+  useEffect(() => { if (route.params?.token) { handleAcceptInvite(route.params.token); } }, []);
+
+  useEffect(() => {
+    const handleDeepLink = (event: { url: string }) => {
+      const { url } = event;
+      if (url.includes('token=')) {
+        const token = url.split('token=')[1];
+        if (token) handleAcceptInvite(token);
+      }
+    };
+    const sub = Linking.addEventListener('url', handleDeepLink);
+    return () => { if (sub) sub.remove(); };
+  }, []);
 
   const sendInvite = async () => {
     if (!pairEmail.trim()) { handleError('Please enter your partner\'s email'); return; }

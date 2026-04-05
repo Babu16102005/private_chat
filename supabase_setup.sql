@@ -182,6 +182,9 @@ CREATE POLICY "View deleted messages" ON public.deleted_messages FOR SELECT USIN
 DROP POLICY IF EXISTS "Mark deleted" ON public.deleted_messages;
 CREATE POLICY "Mark deleted" ON public.deleted_messages FOR INSERT WITH CHECK (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Delete own deleted_messages" ON public.deleted_messages;
+CREATE POLICY "Delete own deleted_messages" ON public.deleted_messages FOR DELETE USING (auth.uid() = user_id);
+
 -- ============================================================================
 -- PART 4: ENABLE REALTIME
 -- ============================================================================

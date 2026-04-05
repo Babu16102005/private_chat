@@ -74,7 +74,12 @@ frontend/
 - `cd frontend && eas build --profile production` — production build (auto-incrementing version)
 
 ### Testing & Linting
-No test framework, linter, or type-check script is configured.
+- **Unit Tests**: No test framework, linter, or type-check script is configured.
+- **E2E Tests**: `cd frontend && node test-e2e.js` — REST API-level integration test suite (tests auth, pairs, messaging, reactions, delete, chat settings, storage, unread count fix verification).
+
+### TypeScript
+- `cd frontend && npx tsc --noEmit` — type-check without emitting output.
+- `tsconfig.json` extends Expo's base config with strict mode enabled.
 
 ## Architecture
 
@@ -105,7 +110,7 @@ Single file exporting these service objects:
 | `messageService` | getMessages (paginated), sendMessage, markMessageAsRead, markMessagesAsDelivered, subscribeToMessages, subscribeToTyping, sendTypingIndicator, subscribeToPresence, getRepliedMessage |
 | `storageService` | uploadFile |
 | `messageReactionsService` | addReaction, removeReaction, getReactions, subscribeToReactions |
-| `deleteMessageService` | deleteForMe, isDeletedForMe |
+| `deleteMessageService` | deleteForMe, isDeletedForMe, getDeletedIdsForUser (batch check) |
 | `chatSettingsService` | blockUser, unblockUser, clearChat |
 
 ### Realtime System

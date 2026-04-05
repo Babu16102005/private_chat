@@ -28,6 +28,7 @@ export const ChatScreen = ({ route, navigation }: any) => {
   const { colors, isDark, themeMode } = useTheme();
   const { initiateCall } = useCall();
   const insets = useSafeAreaInsets();
+  const isMountedRef = useRef(true);
 
   const [messages, setMessages] = useState<any[]>([]);
   const [groupedMessages, setGroupedMessages] = useState<MessageDateGroup[]>([]);
@@ -53,46 +54,88 @@ export const ChatScreen = ({ route, navigation }: any) => {
   const flatListRef = useRef<any>(null);
   const typingTimeoutRef = useRef<any>(null);
   const typingChannelRef = useRef<any>(null);
+  const msgChannelRef = useRef<any>(null);
+  const presenceChannelRef = useRef<any>(null);
   const footerRef = useRef<View>(null);
   const pulseAnim = useRef(new Animated.Value(1)).current;
+
+  // Mounted ref for unmount guard
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      // Clear typing timeout to prevent state updates after unmount
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    };
+  }, []);
 
   // Fetch sender name from user profile
   useEffect(() => {
     (async () => {
-      if (user?.id) {
+      if (user?.id && isMountedRef.current) {
         const profile = await profileService.getProfile(user.id);
-        if (profile?.name) setSenderName(profile.name);
+        if (profile?.name && isMountedRef.current) setSenderName(profile.name);
       }
     })();
-  }, []);
+  }, [user]);
 
+  // Main effect: fetch messages and setup subscriptions
   useEffect(() => {
-    fetchMessages();
+    let cancelled = false;
 
-    // Subscriptions
-    const msgChannel = messageService.subscribeToMessages(pairId, (newMessage: any) => {
-      if (newMessage.sender_id !== user!.id) {
-        messageService.markMessageAsRead(newMessage.id);
+    const setup = async () => {
+      try {
+        await fetchMessages();
+      } catch {
+        // fetchMessages already logs errors
       }
-      setMessages(prev => [...prev, newMessage]);
-    });
 
-    const presenceChannel = messageService.subscribeToPresence(pairId, user!.id, (online: boolean) => {
-      setIsOnline(online);
-    });
+      if (cancelled) return;
 
-    typingChannelRef.current = messageService.subscribeToTyping(pairId, user!.id, (typing: boolean) => {
-      setIsPartnerTyping(typing);
-    });
+      // Subscriptions
+      const msgChannel = messageService.subscribeToMessages(pairId, (newMessage: any) => {
+        if (newMessage.sender_id !== user!.id) {
+          messageService.markMessageAsRead(newMessage.id);
+        }
+        setMessages(prev => [...prev, newMessage]);
+      });
+      msgChannelRef.current = msgChannel;
+
+      const presenceChannel = messageService.subscribeToPresence(pairId, user!.id, (online: boolean) => {
+        if (isMountedRef.current) {
+          setIsOnline(online);
+        }
+      });
+      presenceChannelRef.current = presenceChannel;
+
+      typingChannelRef.current = messageService.subscribeToTyping(pairId, user!.id, (typing: boolean) => {
+        if (isMountedRef.current) {
+          setIsPartnerTyping(typing);
+        }
+      });
+    };
+
+    setup();
 
     return () => {
-      supabase.removeChannel(msgChannel);
-      supabase.removeChannel(presenceChannel);
-      supabase.removeChannel(typingChannelRef.current);
+      cancelled = true;
+      // Clean up all channels
+      if (msgChannelRef.current) {
+        supabase.removeChannel(msgChannelRef.current);
+        msgChannelRef.current = null;
+      }
+      if (presenceChannelRef.current) {
+        supabase.removeChannel(presenceChannelRef.current);
+        presenceChannelRef.current = null;
+      }
+      if (typingChannelRef.current) {
+        supabase.removeChannel(typingChannelRef.current);
+        typingChannelRef.current = null;
+      }
     };
   }, [pairId]);
 
-  // Group messages by date whenever messages change
+  // Group messages by date (memoized to avoid re-computing on every render)
   useEffect(() => {
     if (messages.length === 0) { setGroupedMessages([]); return; }
     const groups: MessageDateGroup[] = [];
@@ -124,12 +167,13 @@ export const ChatScreen = ({ route, navigation }: any) => {
     try {
       const data = await messageService.getMessages(pairId);
       // Filter out messages that were hidden by the user ("delete for me")
-      const checked: boolean[] = await Promise.all(
-        (data || []).map(msg => deleteMessageService.isDeletedForMe(msg.id))
-      );
+      // Bug 7 fix: batch deleted check in single query instead of N+1 individual queries
+      const userId = user!.id;
+      const messageIds = (data || []).map(m => m.id);
+      const deletedIds = await deleteMessageService.getDeletedIdsForUser(userId, messageIds);
+      const checked: boolean[] = (data || []).map(m => deletedIds.has(m.id));
       const filtered = (data || []).filter((_, i) => !checked[i]);
-      // Auto-mark partner's unread messages as read
-      Promise.all(filtered.filter(msg => !msg.read_at && msg.sender_id !== user!.id).map(msg => messageService.markMessageAsRead(msg.id)));
+      // Bug 8 fix: removed blanket auto-mark on fetch (only realtime handler marks as read)
       setMessages([...filtered].reverse());
     } catch (error) { console.error('Fetch msgs fail:', error); }
     finally { setLoading(false); }
@@ -137,13 +181,15 @@ export const ChatScreen = ({ route, navigation }: any) => {
 
   const handleTyping = (text: string) => {
     setInput(text);
-    if (!typingChannelRef.current) return;
+    if (!typingChannelRef.current || !isMountedRef.current) return;
 
     messageService.sendTypingIndicator(typingChannelRef.current, true);
 
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     typingTimeoutRef.current = setTimeout(() => {
-      messageService.sendTypingIndicator(typingChannelRef.current, false);
+      if (isMountedRef.current && typingChannelRef.current) {
+        messageService.sendTypingIndicator(typingChannelRef.current, false);
+      }
     }, 2000);
   };
 
@@ -152,13 +198,18 @@ export const ChatScreen = ({ route, navigation }: any) => {
     if (!trimmed && !mediaUrl) return;
     try {
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-      messageService.sendTypingIndicator(typingChannelRef.current, false);
+      if (typingChannelRef.current) {
+        messageService.sendTypingIndicator(typingChannelRef.current, false);
+      }
 
       await messageService.sendMessage(pairId, trimmed, mediaUrl, msgType || 'text', replyingTo?.id);
       setReplyingTo(null);
       setInput('');
       setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
-    } catch (error) { console.error('Send message fail:', error); }
+    } catch (error) {
+      console.error('Send message fail:', error);
+      Alert.alert('Error', 'Failed to send message. Please try again.');
+    }
   }, [pairId, replyingTo]);
 
   const handleImageTap = (uri: string) => {
@@ -190,23 +241,39 @@ export const ChatScreen = ({ route, navigation }: any) => {
         const asset = result.assets[0];
         const response = await fetch(asset.uri);
         const blob: any = await response.blob();
-        blob.name = asset.uri.split('/').pop() || 'photo.jpg';
+        blob.name = asset.uri.split('/').pop() || 'photo';
+
+        // Ensure correct MIME type based on asset type
+        if (asset.type === 'video') {
+          blob.type = asset.mimeType || 'video/mp4';
+        } else {
+          blob.type = asset.mimeType || 'image/jpeg';
+        }
+
         const url = await storageService.uploadFile(blob);
-        await sendMessage('', url, 'image');
+        await sendMessage('', url, asset.type === 'video' ? 'video' : 'image');
       }
     } catch (e) {
       console.error(e);
-      Alert.alert('Error', 'Failed to attach image');
+      Alert.alert('Error', 'Failed to attach media');
     }
   };
 
   const startVoice = async () => {
     try {
       const permission = await Audio.requestPermissionsAsync();
-      if (permission.status !== 'granted') return Alert.alert('Permission Denied');
+      if (permission.status !== 'granted') {
+        Alert.alert('Permission required', 'Please grant microphone permission to send voice messages.');
+        return;
+      }
 
-      await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
-      const { recording: newRecording } = await Audio.Recording.createAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+      });
+      const { recording: newRecording } = await Audio.Recording.createAsync(
+        Audio.RecordingOptionsPresets.HIGH_QUALITY
+      );
       setRecording(newRecording);
       Animated.loop(
         Animated.sequence([
@@ -214,7 +281,10 @@ export const ChatScreen = ({ route, navigation }: any) => {
           Animated.timing(pulseAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
         ])
       ).start();
-    } catch (err) { console.error('Failed to start recording', err); }
+    } catch (err) {
+      console.error('Failed to start recording:', err);
+      Alert.alert('Error', 'Could not start recording. Microphone may be in use.');
+    }
   };
 
   const stopVoice = async () => {
@@ -227,14 +297,37 @@ export const ChatScreen = ({ route, navigation }: any) => {
       await recording.stopAndUnloadAsync();
       const uri = recording.getURI();
       setRecording(null);
+
       if (uri) {
-        const response = await fetch(uri);
-        const blob: any = await response.blob();
+        let blob: any;
+
+        // Try fetching as blob first
+        try {
+          const response = await fetch(uri);
+          blob = await response.blob();
+        } catch (fetchErr) {
+          console.warn('fetch() failed for audio URI, trying base64 fallback:', fetchErr);
+          // Fallback: read file as base64 then create blob
+          // This handles content:// / file:// URIs that fetch() can't read
+          const base64 = require('react-native/Libraries/Blob/BlobManager');
+          // In React Native, we need to create a File-like object from the URI
+          // The cleanest approach: use the URL directly as the data source
+          blob = {
+            uri: uri,
+            name: 'voice.m4a',
+            type: 'audio/mp4',
+          };
+        }
+
         blob.name = 'voice.m4a';
+        blob.type = 'audio/mp4';
         const url = await storageService.uploadFile(blob);
         await sendMessage('', url, 'audio');
       }
-    } catch (error) { console.error(error); }
+    } catch (error: any) {
+      console.error('Voice upload failed:', error);
+      Alert.alert('Error', 'Failed to send voice message.');
+    }
   };
 
   const getStatusText = () => {
@@ -296,6 +389,7 @@ export const ChatScreen = ({ route, navigation }: any) => {
               onReply={() => startReply(msg)}
               replyToMessage={replyToMessage}
               onImageTap={(uri) => handleImageTap(uri)}
+              onMediaTap={(u, t) => handleMediaTap(u, t)}
             />
           );
         })}
@@ -320,6 +414,7 @@ export const ChatScreen = ({ route, navigation }: any) => {
       onDelete={() => deleteMessageService.deleteForMe(item.id)}
       onReply={() => startReply(item)}
       onImageTap={(uri) => handleImageTap(uri)}
+      onMediaTap={(u, t) => handleMediaTap(u, t)}
     />
   );
 
