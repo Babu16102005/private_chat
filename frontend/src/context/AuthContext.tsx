@@ -1,4 +1,5 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../services/supabase';
 import { authService, profileService } from '../services/supabaseService';
 import { Session, User } from '@supabase/supabase-js';
@@ -29,16 +30,38 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const clearStaleSession = async () => {
+    try {
+      // Remove all supabase auth keys from AsyncStorage
+      const keys = await AsyncStorage.getAllKeys();
+      const supabaseKeys = keys.filter(k => k.includes('supabase') || k.includes('sb-'));
+      if (supabaseKeys.length > 0) await AsyncStorage.multiRemove(supabaseKeys);
+      await supabase.auth.signOut();
+    } catch (e) {
+      // Ignore errors during cleanup
+    }
+  };
+
   useEffect(() => {
     let isMounted = true;
-    
+
     const initializeAuth = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
+        const { data: { session }, error } = await supabase.auth.getSession();
+
+        if (error) {
+          const msg = error.message?.toLowerCase() || '';
+          if (msg.includes('refresh token') || msg.includes('invalid') || msg.includes('expired')) {
+            console.warn('Stale session detected, clearing...', error.message);
+            await clearStaleSession();
+            if (isMounted) setSession(null);
+            return;
+          }
+        }
+
         if (!isMounted) return;
-        
         setSession(session);
-        
+
         if (session?.user) {
           try {
             const profile = await profileService.getProfile(session.user.id);
@@ -49,8 +72,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             console.error('Profile error:', e);
           }
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error('Auth initialization error:', error);
+        // If it looks like a bad token, clear it so the user sees the login screen
+        const msg = error?.message?.toLowerCase() || '';
+        if (msg.includes('refresh token') || msg.includes('invalid') || msg.includes('not found')) {
+          await clearStaleSession();
+          if (isMounted) setSession(null);
+        }
       } finally {
         if (isMounted) setLoading(false);
       }
@@ -60,8 +89,19 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!isMounted) return;
+
+      // TOKEN_REFRESH_FAILED means the stored refresh token is invalid — force sign out
+      if ((event as string) === 'TOKEN_REFRESH_FAILED' || event === 'SIGNED_OUT') {
+        await clearStaleSession();
+        if (isMounted) {
+          setSession(null);
+          setLoading(false);
+        }
+        return;
+      }
+
       setSession(session);
-      
+
       if (event === 'SIGNED_IN' && session?.user) {
         try {
           const profile = await profileService.getProfile(session.user.id);

@@ -1,13 +1,16 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, Dimensions, Platform } from 'react-native';
 import { BlurView } from 'expo-blur';
+import Constants from 'expo-constants';
 import { Phone, PhoneOff, Mic, MicOff, Camera, CameraOff } from 'lucide-react-native';
 import { useCall } from '../context/CallContext';
 import { useTheme } from '../context/ThemeContext';
 import { LinearGradient } from 'expo-linear-gradient';
 
 let RTCView: any;
-if (Platform.OS !== 'web') {
+const isExpoGo = Constants.appOwnership === 'expo';
+
+if (Platform.OS !== 'web' && !isExpoGo) {
   try {
     const webrtc = require('react-native-webrtc');
     RTCView = webrtc.RTCView;

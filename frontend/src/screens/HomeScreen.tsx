@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, TextInput, SafeAreaView, Dimensions, ActivityIndicator, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Moon, Search, Plus, MessageCircle, Droplets, X, Check, CheckCheck } from 'lucide-react-native';
@@ -109,6 +110,14 @@ export const HomeScreen = ({ navigation }: any) => {
       fetchChats();
     }
   }, [user?.id, fetchChats]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (user?.id) {
+        fetchChats();
+      }
+    }, [fetchChats, user?.id])
+  );
 
   // Manage subscriptions when chats change - only setup new, remove stale
   useEffect(() => {

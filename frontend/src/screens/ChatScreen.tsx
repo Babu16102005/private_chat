@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import { View, Text, TextInput, TouchableOpacity, FlatList, StyleSheet, Image, Alert, Platform, KeyboardAvoidingView, Dimensions, Animated } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -6,7 +7,7 @@ import { BlurView } from 'expo-blur';
 import { ChevronLeft, Phone, Video, Mic, Plus, SendHorizontal, Search, X, Square, MoreVertical, Reply as ReplyIcon } from 'lucide-react-native';
 import { messageService, deleteMessageService, storageService, profileService, messageReactionsService } from '../services/supabaseService';
 import * as ImagePicker from 'expo-image-picker';
-import { Audio } from 'expo-av';
+import { useAudioRecorder, AudioModule, RecordingPresets } from 'expo-audio';
 
 import { supabase } from '../services/supabase';
 import { useAuth } from '../context/AuthContext';
@@ -21,6 +22,23 @@ import { formatMessageTime, formatDateHeader, getDateKey } from '../utils/date';
 const { width, height } = Dimensions.get('window');
 
 type MessageDateGroup = { dateKey: string; messages: any[] };
+
+type UploadableFile = {
+  uri: string;
+  name: string;
+  type: string;
+};
+
+const buildUploadFile = (uri: string, fallbackName: string, mimeType: string): UploadableFile => {
+  const normalizedUri = uri.split('?')[0];
+  const fileNameFromUri = normalizedUri.split('/').pop();
+
+  return {
+    uri,
+    name: fileNameFromUri || fallbackName,
+    type: mimeType,
+  };
+};
 
 export const ChatScreen = ({ route, navigation }: any) => {
   const { pairId, partner } = route.params;
@@ -38,7 +56,8 @@ export const ChatScreen = ({ route, navigation }: any) => {
   const [isPartnerTyping, setIsPartnerTyping] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
-  const [recording, setRecording] = useState<Audio.Recording | null>(null);
+  const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+  const [isRecording, setIsRecording] = useState(false);
   const [senderName, setSenderName] = useState('');
 
   // Reply state
@@ -58,6 +77,18 @@ export const ChatScreen = ({ route, navigation }: any) => {
   const presenceChannelRef = useRef<any>(null);
   const footerRef = useRef<View>(null);
   const pulseAnim = useRef(new Animated.Value(1)).current;
+
+  const fetchMessages = useCallback(async () => {
+    if (!user?.id) return;
+    try {
+      const data = await messageService.getMessages(pairId);
+      const messageIds = (data || []).map(m => m.id);
+      const deletedIds = await deleteMessageService.getDeletedIdsForUser(user.id, messageIds);
+      const filtered = (data || []).filter(m => !deletedIds.has(m.id));
+      setMessages([...filtered].reverse());
+    } catch (error) { console.error('Fetch msgs fail:', error); }
+    finally { setLoading(false); }
+  }, [pairId, user?.id]);
 
   // Mounted ref for unmount guard
   useEffect(() => {
@@ -81,6 +112,7 @@ export const ChatScreen = ({ route, navigation }: any) => {
 
   // Main effect: fetch messages and setup subscriptions
   useEffect(() => {
+    if (!user?.id) return;
     let cancelled = false;
 
     const setup = async () => {
@@ -94,21 +126,21 @@ export const ChatScreen = ({ route, navigation }: any) => {
 
       // Subscriptions
       const msgChannel = messageService.subscribeToMessages(pairId, (newMessage: any) => {
-        if (newMessage.sender_id !== user!.id) {
+        if (newMessage.sender_id !== user.id) {
           messageService.markMessageAsRead(newMessage.id);
         }
         setMessages(prev => [...prev, newMessage]);
       });
       msgChannelRef.current = msgChannel;
 
-      const presenceChannel = messageService.subscribeToPresence(pairId, user!.id, (online: boolean) => {
+      const presenceChannel = messageService.subscribeToPresence(pairId, user.id, (online: boolean) => {
         if (isMountedRef.current) {
           setIsOnline(online);
         }
       });
       presenceChannelRef.current = presenceChannel;
 
-      typingChannelRef.current = messageService.subscribeToTyping(pairId, user!.id, (typing: boolean) => {
+      typingChannelRef.current = messageService.subscribeToTyping(pairId, user.id, (typing: boolean) => {
         if (isMountedRef.current) {
           setIsPartnerTyping(typing);
         }
@@ -133,7 +165,7 @@ export const ChatScreen = ({ route, navigation }: any) => {
         typingChannelRef.current = null;
       }
     };
-  }, [pairId]);
+  }, [pairId, user?.id, fetchMessages]);
 
   // Group messages by date (memoized to avoid re-computing on every render)
   useEffect(() => {
@@ -163,21 +195,12 @@ export const ChatScreen = ({ route, navigation }: any) => {
     }
   }, [messages.length]);
 
-  const fetchMessages = async () => {
-    try {
-      const data = await messageService.getMessages(pairId);
-      // Filter out messages that were hidden by the user ("delete for me")
-      // Bug 7 fix: batch deleted check in single query instead of N+1 individual queries
-      const userId = user!.id;
-      const messageIds = (data || []).map(m => m.id);
-      const deletedIds = await deleteMessageService.getDeletedIdsForUser(userId, messageIds);
-      const checked: boolean[] = (data || []).map(m => deletedIds.has(m.id));
-      const filtered = (data || []).filter((_, i) => !checked[i]);
-      // Bug 8 fix: removed blanket auto-mark on fetch (only realtime handler marks as read)
-      setMessages([...filtered].reverse());
-    } catch (error) { console.error('Fetch msgs fail:', error); }
-    finally { setLoading(false); }
-  };
+  useFocusEffect(
+    useCallback(() => {
+      fetchMessages();
+    }, [fetchMessages])
+  );
+
 
   const handleTyping = (text: string) => {
     setInput(text);
@@ -239,18 +262,13 @@ export const ChatScreen = ({ route, navigation }: any) => {
 
       if (!result.canceled && result.assets[0]) {
         const asset = result.assets[0];
-        const response = await fetch(asset.uri);
-        const blob: any = await response.blob();
-        blob.name = asset.uri.split('/').pop() || 'photo';
+        const mimeType = asset.type === 'video'
+          ? (asset.mimeType || 'video/mp4')
+          : (asset.mimeType || 'image/jpeg');
+        const fallbackName = asset.type === 'video' ? 'video.mp4' : 'photo.jpg';
+        const uploadFile = buildUploadFile(asset.uri, fallbackName, mimeType);
 
-        // Ensure correct MIME type based on asset type
-        if (asset.type === 'video') {
-          blob.type = asset.mimeType || 'video/mp4';
-        } else {
-          blob.type = asset.mimeType || 'image/jpeg';
-        }
-
-        const url = await storageService.uploadFile(blob);
+        const url = await storageService.uploadFile(uploadFile);
         await sendMessage('', url, asset.type === 'video' ? 'video' : 'image');
       }
     } catch (e) {
@@ -261,20 +279,14 @@ export const ChatScreen = ({ route, navigation }: any) => {
 
   const startVoice = async () => {
     try {
-      const permission = await Audio.requestPermissionsAsync();
-      if (permission.status !== 'granted') {
+      const permission = await AudioModule.requestRecordingPermissionsAsync();
+      if (!permission.granted) {
         Alert.alert('Permission required', 'Please grant microphone permission to send voice messages.');
         return;
       }
 
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-      });
-      const { recording: newRecording } = await Audio.Recording.createAsync(
-        Audio.RecordingOptionsPresets.HIGH_QUALITY
-      );
-      setRecording(newRecording);
+      await audioRecorder.record();
+      setIsRecording(true);
       Animated.loop(
         Animated.sequence([
           Animated.timing(pulseAnim, { toValue: 1.25, duration: 800, useNativeDriver: true }),
@@ -288,40 +300,18 @@ export const ChatScreen = ({ route, navigation }: any) => {
   };
 
   const stopVoice = async () => {
-    if (!recording) return;
+    if (!isRecording) return;
     try {
-      Animated.sequence([
-        Animated.timing(pulseAnim, { toValue: 1, duration: 150, useNativeDriver: true }),
-      ]).start();
+      pulseAnim.stopAnimation();
+      Animated.timing(pulseAnim, { toValue: 1, duration: 150, useNativeDriver: true }).start();
 
-      await recording.stopAndUnloadAsync();
-      const uri = recording.getURI();
-      setRecording(null);
+      await audioRecorder.stop();
+      setIsRecording(false);
+      const uri = audioRecorder.uri;
 
       if (uri) {
-        let blob: any;
-
-        // Try fetching as blob first
-        try {
-          const response = await fetch(uri);
-          blob = await response.blob();
-        } catch (fetchErr) {
-          console.warn('fetch() failed for audio URI, trying base64 fallback:', fetchErr);
-          // Fallback: read file as base64 then create blob
-          // This handles content:// / file:// URIs that fetch() can't read
-          const base64 = require('react-native/Libraries/Blob/BlobManager');
-          // In React Native, we need to create a File-like object from the URI
-          // The cleanest approach: use the URL directly as the data source
-          blob = {
-            uri: uri,
-            name: 'voice.m4a',
-            type: 'audio/mp4',
-          };
-        }
-
-        blob.name = 'voice.m4a';
-        blob.type = 'audio/mp4';
-        const url = await storageService.uploadFile(blob);
+        const uploadFile = buildUploadFile(uri, 'voice.m4a', 'audio/mp4');
+        const url = await storageService.uploadFile(uploadFile);
         await sendMessage('', url, 'audio');
       }
     } catch (error: any) {
@@ -352,6 +342,12 @@ export const ChatScreen = ({ route, navigation }: any) => {
   const cancelReply = () => {
     setReplyingTo(null);
   };
+
+  const handleDeleteMessage = useCallback(async (messageId: string) => {
+    await deleteMessageService.deleteForMe(messageId);
+    setMessages(prev => prev.filter(message => message.id !== messageId));
+    setReplyingTo(prev => prev?.id === messageId ? null : prev);
+  }, []);
 
   // Grouped list render
   const renderMessageGroup = ({ item: group }: { item: MessageDateGroup }) => {
@@ -385,7 +381,7 @@ export const ChatScreen = ({ route, navigation }: any) => {
               timestamp={msg.created_at}
               delivered_at={msg.delivered_at}
               read_at={msg.read_at}
-              onDelete={() => deleteMessageService.deleteForMe(msg.id)}
+              onDelete={() => handleDeleteMessage(msg.id)}
               onReply={() => startReply(msg)}
               replyToMessage={replyToMessage}
               onImageTap={(uri) => handleImageTap(uri)}
@@ -411,7 +407,7 @@ export const ChatScreen = ({ route, navigation }: any) => {
       timestamp={item.created_at}
       delivered_at={item.delivered_at}
       read_at={item.read_at}
-      onDelete={() => deleteMessageService.deleteForMe(item.id)}
+      onDelete={() => handleDeleteMessage(item.id)}
       onReply={() => startReply(item)}
       onImageTap={(uri) => handleImageTap(uri)}
       onMediaTap={(u, t) => handleMediaTap(u, t)}
@@ -596,7 +592,7 @@ export const ChatScreen = ({ route, navigation }: any) => {
 
         {/* Input Bar */}
         <View style={[styles.pillWrapper, { paddingBottom: Math.max(insets.bottom, 10) }]}>
-          {recording && (
+          {isRecording && (
             <Animated.View style={[styles.recordingIndicator, { transform: [{ scale: pulseAnim }] }]}>
               <View style={[styles.recordingDot, { backgroundColor: '#FF3B30' }]} />
               <Text style={styles.recordingText}>Recording... Tap mic to stop</Text>
@@ -631,8 +627,8 @@ export const ChatScreen = ({ route, navigation }: any) => {
                 <SendHorizontal size={18} color="white" strokeWidth={2.5} />
               </TouchableOpacity>
             ) : (
-              <TouchableOpacity onPress={recording ? stopVoice : startVoice} style={styles.pillAction}>
-                {recording ? <Square size={20} color="#FF3B30" fill="#FF3B30" /> : <Mic size={22} color={colors.primary} strokeWidth={1.5} />}
+              <TouchableOpacity onPress={isRecording ? stopVoice : startVoice} style={styles.pillAction}>
+                {isRecording ? <Square size={20} color="#FF3B30" fill="#FF3B30" /> : <Mic size={22} color={colors.primary} strokeWidth={1.5} />}
               </TouchableOpacity>
             )}
           </BlurView>

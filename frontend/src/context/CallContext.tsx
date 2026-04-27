@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import { Platform, Alert } from 'react-native';
+import Constants from 'expo-constants';
 import { supabase } from '../services/supabase';
 import { useAuth } from './AuthContext';
 
@@ -8,6 +9,7 @@ let RTCIceCandidateImpl: any;
 let RTCSessionDescriptionImpl: any;
 let mediaDevicesImpl: any;
 let MediaStreamImpl: any;
+const isExpoGo = Constants.appOwnership === 'expo';
 
 if (Platform.OS === 'web') {
   RTCPeerConnectionImpl = globalThis.RTCPeerConnection;
@@ -15,7 +17,7 @@ if (Platform.OS === 'web') {
   RTCSessionDescriptionImpl = globalThis.RTCSessionDescription;
   mediaDevicesImpl = typeof navigator !== 'undefined' ? navigator.mediaDevices : null;
   MediaStreamImpl = globalThis.MediaStream;
-} else {
+} else if (!isExpoGo) {
   try {
     const webrtc = require('react-native-webrtc');
     RTCPeerConnectionImpl = webrtc.RTCPeerConnection;
@@ -28,6 +30,8 @@ if (Platform.OS === 'web') {
       'WebRTC native module not found. Calls require a custom dev build. Run `npx expo run:android`.'
     );
   }
+} else {
+  console.warn('Running in Expo Go. WebRTC calling is disabled until you use a custom dev build.');
 }
 
 type CallState = 'IDLE' | 'RINGING' | 'CONNECTED' | 'REJECTED' | 'ENDED';
@@ -298,11 +302,11 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (msg.includes('WebRTC is not available')) {
         Alert.alert('Call feature unavailable',
           'Video/audio calls require a custom dev build with native modules.\n\n' +
-          'Build the app with: npx expo run:android\n\n' +
+          'Expo Go can use chat features, but calling needs: npx expo run:android\n\n' +
           'Alternatively, install a preview build via EAS.');
-      } else {
-        Alert.alert('Call failed', msg);
-      }
+        } else {
+          Alert.alert('Call failed', msg);
+        }
       cleanup();
     }
   };

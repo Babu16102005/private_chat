@@ -213,18 +213,21 @@ export const inviteService = {
           *,
           user_a:users!pairs_user_a_id_fkey(*),
           user_b:users!pairs_user_b_id_fkey(*),
-          messages:messages(content, created_at, message_type, sender_id, read_at)
+          messages:messages(id, content, created_at, message_type, sender_id, read_at, delivered_at)
         `)
         .or(`user_a_id.eq.${user.id},user_b_id.eq.${user.id}`)
         .eq('status', 'active');
 
       if (error) throw error;
 
-      // Sort and pick latest message + calculate unread count for each
+      const messageIds = (data || []).flatMap((p: any) => (p.messages || []).map((m: any) => m.id));
+      const deletedIds = await deleteMessageService.getDeletedIdsForUser(user.id, messageIds);
+
       return (data || []).map((p: any) => {
-          const sortedMsgs = p.messages.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-          const unread = p.messages.filter((m: any) => m.sender_id !== user.id && !m.read_at).length;
-          return { ...p, last_message: sortedMsgs[0] || null, unread_count: unread };
+          const visibleMessages = (p.messages || []).filter((m: any) => !deletedIds.has(m.id));
+          const sortedMsgs = visibleMessages.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+          const unread = visibleMessages.filter((m: any) => m.sender_id !== user.id && !m.read_at).length;
+          return { ...p, messages: visibleMessages, last_message: sortedMsgs[0] || null, unread_count: unread };
       });
     } catch (error) {
       console.error('getMyPairs error:', error);
@@ -337,7 +340,7 @@ export const storageService = {
       if (!user) throw new Error('Auth required');
 
       let fileName: string;
-      let contentType: string | undefined = file.type;
+      const contentType: string | undefined = file.type || file.mimeType;
 
       // Handle file URI objects (from camera/audio recording)
       if (file.uri) {
@@ -345,7 +348,9 @@ export const storageService = {
                     file.uri.split('.').pop() ||
                     'bin';
         fileName = `${user.id}/${Date.now()}.${ext}`;
-        const { data, error } = await supabase.storage.from(bucket).upload(fileName, file as any);
+        const { data, error } = await supabase.storage.from(bucket).upload(fileName, file as any, {
+          contentType: contentType || undefined,
+        });
         if (error) throw error;
         return supabase.storage.from(bucket).getPublicUrl(fileName).data.publicUrl;
       }
@@ -403,7 +408,12 @@ export const deleteMessageService = {
     try {
       const user = await authService.getCurrentUser();
       if (!user) throw new Error('Auth required');
-      await supabase.from('deleted_messages').insert({ message_id: messageId, user_id: user.id });
+      await supabase
+        .from('deleted_messages')
+        .upsert(
+          { message_id: messageId, user_id: user.id },
+          { onConflict: 'message_id,user_id', ignoreDuplicates: true }
+        );
     } catch (error) { console.error(error); }
   },
 
