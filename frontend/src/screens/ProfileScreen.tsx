@@ -16,7 +16,7 @@ export const ProfileScreen = ({ navigation }: any) => {
   const { themeMode, toggleTheme, colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const [name, setName] = useState('');
-  const [about, setAbout] = useState('Hey there! I am using CoupleChat');
+  const [about, setAbout] = useState('Hey there! I am using kiba');
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [newPassword, setNewPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -25,7 +25,7 @@ export const ProfileScreen = ({ navigation }: any) => {
   const [aboutText, setAboutText] = useState('');
   const [nameText, setNameText] = useState('');
 
-  const DEFAULT_ABOUT = 'Hey there! I am using CoupleChat';
+  const DEFAULT_ABOUT = 'Hey there! I am using kiba';
 
   useEffect(() => { if (user?.id) fetchProfile(); }, [user]);
 

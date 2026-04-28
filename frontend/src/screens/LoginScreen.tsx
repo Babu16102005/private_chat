@@ -39,7 +39,7 @@ export const LoginScreen = ({ navigation }: any) => {
             <LinearGradient colors={['rgba(255,255,255,0.12)', 'rgba(115,55,185,0.22)', 'rgba(10,2,28,0.52)'] as any} style={StyleSheet.absoluteFill} />
             <View style={styles.frostFill} />
             <View style={styles.topSection}>
-              <Text style={[styles.brandText, { color: colors.primary }]}>CoupleChat</Text>
+              <Text style={[styles.brandText, { color: colors.primary }]}>kiba</Text>
               <Text style={[styles.title, { color: colors.text }]}>Welcome back</Text>
               <Text style={[styles.subtitle, { color: colors.gray }]}>Sign in to your account</Text>
             </View>

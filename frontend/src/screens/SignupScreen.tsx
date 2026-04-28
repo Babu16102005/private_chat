@@ -47,7 +47,7 @@ export const SignupScreen = ({ navigation }: any) => {
 
           <BlurView intensity={colors.glassBlur} tint={isDark ? 'dark' : 'light'} style={[styles.authPanel, { borderColor: colors.glassBorder }]}> 
             <View style={styles.topSection}>
-              <Text style={[styles.brandText, { color: colors.primary }]}>CoupleChat</Text>
+              <Text style={[styles.brandText, { color: colors.primary }]}>kiba</Text>
               <Text style={[styles.title, { color: colors.text }]}>Create account</Text>
               <Text style={[styles.subtitle, { color: colors.gray }]}>Start your private conversation space</Text>
             </View>

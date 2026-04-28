@@ -156,7 +156,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = memo(
         if (Platform.OS === 'web') {
           const link = document.createElement('a');
           link.href = mediaUrl;
-          link.download = `couplechat-${Date.now()}.${getMediaExtension(mediaUrl, normalizedMessageType)}`;
+          link.download = `kiba-${Date.now()}.${getMediaExtension(mediaUrl, normalizedMessageType)}`;
           link.target = '_blank';
           document.body.appendChild(link);
           link.click();
@@ -165,7 +165,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = memo(
         }
 
         const extension = getMediaExtension(mediaUrl, normalizedMessageType);
-        const fileName = `couplechat-${Date.now()}.${extension}`;
+        const fileName = `kiba-${Date.now()}.${extension}`;
         await File.downloadFileAsync(mediaUrl, new File(Paths.document, fileName), { idempotent: true });
 
         Alert.alert('Downloaded', `Saved to app storage as ${fileName}`);

@@ -1,4 +1,4 @@
-// End-to-End Test for CoupleChat via Supabase REST API
+// End-to-End Test for kiba via Supabase REST API
 // Tests: Auth, Profile, Invites, Pairs, Messaging, Reactions, Delete, Chat Settings, Storage, RLS, Pagination
 const { createClient } = require('@supabase/supabase-js');
 
@@ -461,7 +461,7 @@ async function testSessionSecurity() {
 
 // ─── MAIN ───
 async function main() {
-  console.log('\n\u{1F680} CoupleChat Production E2E Test Suite');
+  console.log('\n\u{1F680} kiba Production E2E Test Suite');
   console.log('Testing via Supabase REST API — Auth, RLS, Messaging, Storage, Integrity\n');
 
   await testAuth();
