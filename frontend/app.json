@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "kiba",
-    "slug": "kiba",
+    "slug": "couplechat",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -20,7 +20,11 @@
       "bundleIdentifier": "com.chatapplication.app",
       "associatedDomains": [
         "applinks:chatapplication.app"
-      ]
+      ],
+      "bitcode": false,
+      "runtimeVersion": {
+        "policy": "appVersion"
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -42,7 +46,18 @@
             "DEFAULT"
           ]
         }
-      ]
+      ],
+      "permissions": [
+        "android.permission.ACCESS_NETWORK_STATE",
+        "android.permission.CAMERA",
+        "android.permission.INTERNET",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.WAKE_LOCK",
+        "android.permission.BLUETOOTH"
+      ],
+      "runtimeVersion": "1.0.0"
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -63,6 +78,9 @@
       "eas": {
         "projectId": "b8f312e9-72ea-452a-95f4-93514e3e237b"
       }
+    },
+    "updates": {
+      "url": "https://u.expo.dev/b8f312e9-72ea-452a-95f4-93514e3e237b"
     }
   }
 }
