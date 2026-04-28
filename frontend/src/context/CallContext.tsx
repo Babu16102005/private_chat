@@ -80,6 +80,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const inboundChannel = useRef<any>(null);
   const outboundChannel = useRef<any>(null);
   const callStateRef = useRef<CallState>('IDLE');
+  const pendingIceCandidates = useRef<any[]>([]);
 
   useEffect(() => {
     callStateRef.current = callState;
@@ -95,7 +96,9 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const resetCallState = useCallback(() => {
     if (pc.current) {
       try {
-        pc.current.close();
+        if (pc.current.connectionState !== 'closed') {
+          pc.current.close();
+        }
       } catch (e) {
         console.warn('Error closing peer connection:', e);
       }
@@ -103,6 +106,9 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     removeChannel(outboundChannel);
+
+    // Clear pending ICE candidates queue
+    pendingIceCandidates.current = [];
 
     setRemoteSdp(null);
     setRemoteStream(null);
@@ -117,7 +123,13 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setLocalStream((currentStream: any) => {
       if (currentStream) {
         try {
-          currentStream.getTracks().forEach((track: any) => track.stop());
+          currentStream.getTracks().forEach((track: any) => {
+            try {
+              track.stop();
+            } catch (e) {
+              console.warn('Error stopping track:', e);
+            }
+          });
         } catch (e) {
           console.warn('Error stopping media tracks:', e);
         }
@@ -131,8 +143,22 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const channel = supabase.channel(`calls:${targetUserId}`);
     outboundChannel.current = channel;
-    channel.subscribe(); // fire-and-forget; broadcast works immediately
-    return channel;
+    
+    return new Promise<any>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error('Channel subscription timeout'));
+      }, 5000);
+
+      channel.subscribe((status: string) => {
+        if (status === 'SUBSCRIBED') {
+          clearTimeout(timeout);
+          resolve(channel);
+        } else if (status === 'CHANNEL_ERROR') {
+          clearTimeout(timeout);
+          reject(new Error('Channel subscription failed'));
+        }
+      });
+    });
   }, [removeChannel]);
 
   const sendSignal = useCallback(async (event: string, payload: Record<string, any>) => {
@@ -177,7 +203,12 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
           case 'ice-candidate':
             if (!pc.current || !payload.candidate) return;
             try {
-              await pc.current.addIceCandidate(new RTCIceCandidateImpl(payload.candidate));
+              if (pc.current.remoteDescription) {
+                await pc.current.addIceCandidate(new RTCIceCandidateImpl(payload.candidate));
+              } else {
+                // Queue ICE candidate if remote description not set yet
+                pendingIceCandidates.current.push(payload.candidate);
+              }
             } catch (error) {
               console.error('Failed to add ICE candidate:', error);
             }
@@ -187,6 +218,17 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
             if (!pc.current || !payload.sdp) return;
             try {
               await pc.current.setRemoteDescription(new RTCSessionDescriptionImpl(payload.sdp));
+              
+              // Drain pending ICE candidates after remote description is set
+              while (pendingIceCandidates.current.length > 0) {
+                const candidate = pendingIceCandidates.current.shift();
+                try {
+                  await pc.current.addIceCandidate(new RTCIceCandidateImpl(candidate));
+                } catch (error) {
+                  console.error('Failed to add queued ICE candidate:', error);
+                }
+              }
+              
               setCallState('CONNECTED');
             } catch (error) {
               console.error('Failed to set remote answer:', error);
@@ -254,10 +296,31 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     };
 
-    const stream = await mediaDevicesImpl.getUserMedia({
-      audio: true,
-      video: wantsVideo,
-    });
+    let stream;
+    try {
+      stream = await mediaDevicesImpl.getUserMedia({
+        audio: true,
+        video: wantsVideo,
+      });
+    } catch (error: any) {
+      if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+        Alert.alert(
+          'Permission Required',
+          'Please grant camera and microphone permissions to make calls. Check your browser or device settings.'
+        );
+      } else if (error.name === 'NotFoundError') {
+        Alert.alert(
+          'Device Not Found',
+          'No camera or microphone found. Please connect a device and try again.'
+        );
+      } else {
+        Alert.alert(
+          'Media Access Failed',
+          'Could not access camera or microphone. Please check your device settings.'
+        );
+      }
+      throw error;
+    }
 
     setLocalStream((currentStream: any) => {
       if (currentStream) {
@@ -318,6 +381,17 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await setupPeerConnection(partnerInfo.id, !isCameraOff);
 
       await pc.current.setRemoteDescription(new RTCSessionDescriptionImpl(remoteSdp));
+      
+      // Drain pending ICE candidates after remote description is set
+      while (pendingIceCandidates.current.length > 0) {
+        const candidate = pendingIceCandidates.current.shift();
+        try {
+          await pc.current.addIceCandidate(new RTCIceCandidateImpl(candidate));
+        } catch (error) {
+          console.error('Failed to add queued ICE candidate:', error);
+        }
+      }
+      
       const answer = await pc.current.createAnswer();
       await pc.current.setLocalDescription(answer);
 
@@ -355,17 +429,21 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const toggleMute = () => {
-    if (localStream) {
-      localStream.getAudioTracks().forEach((track: any) => track.enabled = !track.enabled);
-      setIsMuted(!isMuted);
-    }
+    if (!localStream) return;
+    const audioTracks = localStream.getAudioTracks();
+    if (audioTracks.length === 0) return;
+    
+    audioTracks.forEach((track: any) => track.enabled = !track.enabled);
+    setIsMuted(!isMuted);
   };
 
   const toggleCamera = () => {
-    if (localStream) {
-      localStream.getVideoTracks().forEach((track: any) => track.enabled = !track.enabled);
-      setIsCameraOff(!isCameraOff);
-    }
+    if (!localStream) return;
+    const videoTracks = localStream.getVideoTracks();
+    if (videoTracks.length === 0) return;
+    
+    videoTracks.forEach((track: any) => track.enabled = !track.enabled);
+    setIsCameraOff(!isCameraOff);
   };
 
   return (

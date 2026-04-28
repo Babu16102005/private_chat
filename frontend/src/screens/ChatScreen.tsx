@@ -301,6 +301,7 @@ export const ChatScreen = ({ route, navigation }: any) => {
 
   const stopVoice = async () => {
     if (!isRecording) return;
+    
     try {
       pulseAnim.stopAnimation();
       Animated.timing(pulseAnim, { toValue: 1, duration: 150, useNativeDriver: true }).start();
@@ -316,6 +317,7 @@ export const ChatScreen = ({ route, navigation }: any) => {
       }
     } catch (error: any) {
       console.error('Voice upload failed:', error);
+      setIsRecording(false);
       Alert.alert('Error', 'Failed to send voice message.');
     }
   };

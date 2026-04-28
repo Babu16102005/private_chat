@@ -1,0 +1,161 @@
+# Implementation Plan
+
+- [x] 1. Write bug condition exploration test
+  - **Property 1: Bug Condition** - Call and Voice Message Failures Due to Missing Permissions and Race Conditions
+  - **CRITICAL**: This test MUST FAIL on unfixed code - failure confirms the bug exists
+  - **DO NOT attempt to fix the test or the code when it fails**
+  - **NOTE**: This test encodes the expected behavior - it will validate the fix when it passes after implementation
+  - **GOAL**: Surface counterexamples that demonstrate the bugs exist
+  - **Scoped PBT Approach**: For deterministic bugs, scope the property to the concrete failing case(s) to ensure reproducibility
+  - Test implementation details from Bug Condition in design:
+    - Mock `getUserMedia` to throw permission error, initiate call, observe unhandled error
+    - Send ICE candidate before remote description is set, observe WebRTC "Cannot add ICE candidate" error
+    - Call `stopVoice` when recorder is not recording, observe crash or silent failure
+    - Send signal immediately after channel creation, observe lost message
+  - The test assertions should match the Expected Behavior Properties from design:
+    - Permission requests are made before media access with user-friendly error handling
+    - ICE candidates are queued when remote description is not set
+    - Recorder state is validated before stop operations
+    - Signaling channel subscription is confirmed before sending messages
+  - Run test on UNFIXED code
+  - **EXPECTED OUTCOME**: Test FAILS (this is correct - it proves the bug exists)
+  - Document counterexamples found to understand root cause:
+    - `getUserMedia` throws "NotAllowedError: Permission denied" without user feedback
+    - `addIceCandidate` throws "InvalidStateError: Cannot add ICE candidate before setting remote description"
+    - `audioRecorder.stop()` throws error when not recording
+    - Signaling messages sent before channel subscription are lost
+  - Mark task complete when test is written, run, and failure is documented
+  - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8_
+
+- [x] 2. Write preservation property tests (BEFORE implementing fix)
+  - **Property 2: Preservation** - Non-Call Features Remain Unchanged
+  - **IMPORTANT**: Follow observation-first methodology
+  - Observe behavior on UNFIXED code for non-buggy inputs:
+    - Text messaging works correctly
+    - Image/video uploads work correctly
+    - Navigation between screens works correctly
+    - Theme switching works correctly
+    - Typing indicators work correctly
+    - Message reactions work correctly
+  - Write property-based tests capturing observed behavior patterns from Preservation Requirements:
+    - For all text message inputs, sending and receiving works as before
+    - For all media attachment inputs, upload and display works as before
+    - For all navigation actions, screen transitions work as before
+    - For all theme changes, styling updates work as before
+  - Property-based testing generates many test cases for stronger guarantees
+  - Run tests on UNFIXED code
+  - **EXPECTED OUTCOME**: Tests PASS (this confirms baseline behavior to preserve)
+  - Mark task complete when tests are written, run, and passing on unfixed code
+  - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 3.8_
+
+- [x] 3. Fix for audio/video call and audio message bugs
+
+  - [x] 3.1 Add permission request and error handling before getUserMedia
+    - In `frontend/src/context/CallContext.tsx`, function `setupPeerConnection`
+    - Add try-catch around `mediaDevicesImpl.getUserMedia` with specific error handling for permission denial
+    - Show user-friendly Alert explaining why permissions are needed when denied
+    - Return early if permissions denied to prevent further errors
+    - _Bug_Condition: isBugCondition(input) where input.action == 'initiateCall' OR input.action == 'acceptCall' AND input.hasPermission == false AND getUserMediaCalled()_
+    - _Expected_Behavior: Permission requests are made before media access, denials show user-friendly alerts (Property 1 from design)_
+    - _Preservation: Text messaging, image sharing, navigation, theme changes remain unchanged (Property 6 from design)_
+    - _Requirements: 2.1, 2.2_
+
+  - [x] 3.2 Implement ICE candidate queue to prevent race conditions
+    - In `frontend/src/context/CallContext.tsx`
+    - Create `pendingIceCandidates` ref: `useRef<RTCIceCandidate[]>([])`
+    - In broadcast handler for `ice-candidate`, check if `pc.current.remoteDescription` exists
+    - If no remote description, push candidate to queue instead of adding immediately
+    - After `setRemoteDescription` in `call-answer` handler, drain the queue by adding all pending candidates
+    - Clear pending ICE candidates queue in `resetCallState`
+    - _Bug_Condition: isBugCondition(input) where input.action == 'receiveIceCandidate' AND input.iceCandidate != null AND input.remoteSdp == null_
+    - _Expected_Behavior: ICE candidates are queued and applied after remote description is set (Property 2 from design)_
+    - _Preservation: Call state changes and UI updates remain unchanged (Property 6 from design)_
+    - _Requirements: 2.3_
+
+  - [x] 3.3 Wait for channel subscription before sending signals
+    - In `frontend/src/context/CallContext.tsx`, function `ensureOutboundChannel`
+    - Change `channel.subscribe()` to return a Promise that resolves when subscription is confirmed
+    - Use `channel.subscribe((status) => { if (status === 'SUBSCRIBED') resolve(); })` pattern
+    - Await this Promise in `sendSignal` before broadcasting
+    - Add timeout to prevent infinite waiting (e.g., 5 seconds)
+    - _Bug_Condition: isBugCondition(input) where input.action == 'sendSignal' AND channelNotReady()_
+    - _Expected_Behavior: Signaling channel subscription is confirmed before sending messages (Property 3 from design)_
+    - _Preservation: Message delivery and realtime subscriptions remain unchanged (Property 6 from design)_
+    - _Requirements: 2.5_
+
+  - [x] 3.4 Validate track existence in toggle functions
+    - In `frontend/src/context/CallContext.tsx`, functions `toggleMute` and `toggleCamera`
+    - Add null check: `if (!localStream) return;`
+    - Add track existence check: `if (localStream.getAudioTracks().length === 0) return;` for mute
+    - Add track existence check: `if (localStream.getVideoTracks().length === 0) return;` for camera
+    - _Bug_Condition: isBugCondition(input) where track operations are called without validating stream/track existence_
+    - _Expected_Behavior: Media track operations are validated before modification (Property 4 from design)_
+    - _Preservation: Call UI controls and state updates remain unchanged (Property 6 from design)_
+    - _Requirements: 2.6_
+
+  - [x] 3.5 Improve cleanup validation in resetCallState
+    - In `frontend/src/context/CallContext.tsx`, function `resetCallState`
+    - Add peer connection state check: `if (pc.current && pc.current.connectionState !== 'closed')` before calling `close()`
+    - Ensure all tracks are stopped with try-catch around `track.stop()`
+    - Clear pending ICE candidates queue
+    - _Bug_Condition: isBugCondition(input) where cleanup is called with invalid peer connection state_
+    - _Expected_Behavior: Cleanup is complete and safe for all peer connection states (Property 5 from design)_
+    - _Preservation: Call termination flow and state reset remain unchanged (Property 6 from design)_
+    - _Requirements: 2.8_
+
+  - [x] 3.6 Validate recorder state before stop in ChatScreen
+    - In `frontend/src/screens/ChatScreen.tsx`, function `stopVoice`
+    - Add state check before calling `audioRecorder.stop()`: `if (!isRecording || !audioRecorder.isRecording) return;`
+    - Add try-catch around `audioRecorder.stop()` with user-facing error message
+    - Ensure `setIsRecording(false)` is called even if stop fails
+    - _Bug_Condition: isBugCondition(input) where input.action == 'stopRecording' AND input.recorderState != 'recording'_
+    - _Expected_Behavior: Recorder state is validated before stop operations (Property 1 from design)_
+    - _Preservation: Voice message playback and chat features remain unchanged (Property 6 from design)_
+    - _Requirements: 2.4_
+
+  - [x] 3.7 Improve recording permission handling in startVoice
+    - In `frontend/src/screens/ChatScreen.tsx`, function `startVoice`
+    - After `requestRecordingPermissionsAsync`, check `permission.granted` explicitly
+    - If denied, show Alert and return early without attempting to record
+    - Add try-catch around `audioRecorder.record()` for initialization failures
+    - _Bug_Condition: isBugCondition(input) where recording is attempted without permission_
+    - _Expected_Behavior: Permission requests are made before recording with clear user feedback (Property 1 from design)_
+    - _Preservation: Audio message playback and chat features remain unchanged (Property 6 from design)_
+    - _Requirements: 2.1, 2.4_
+
+  - [x] 3.8 Verify bug condition exploration test now passes
+    - **Property 1: Expected Behavior** - Call and Voice Message Features Work With Proper Permissions and Synchronization
+    - **IMPORTANT**: Re-run the SAME test from task 1 - do NOT write a new test
+    - The test from task 1 encodes the expected behavior
+    - When this test passes, it confirms the expected behavior is satisfied
+    - Run bug condition exploration test from step 1
+    - **EXPECTED OUTCOME**: Test PASSES (confirms bug is fixed)
+    - Verify all scenarios now work correctly:
+      - Permission requests are made before media access
+      - ICE candidates are queued and applied correctly
+      - Recorder state is validated before operations
+      - Signaling channel is ready before sending messages
+    - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.8_
+
+  - [x] 3.9 Verify preservation tests still pass
+    - **Property 2: Preservation** - Non-Call Features Remain Unchanged
+    - **IMPORTANT**: Re-run the SAME tests from task 2 - do NOT write new tests
+    - Run preservation property tests from step 2
+    - **EXPECTED OUTCOME**: Tests PASS (confirms no regressions)
+    - Confirm all tests still pass after fix:
+      - Text messaging works as before
+      - Media attachments work as before
+      - Navigation works as before
+      - Theme changes work as before
+      - Typing indicators work as before
+      - Message reactions work as before
+    - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 3.8_
+
+- [x] 4. Checkpoint - Ensure all tests pass
+  - Run all property-based tests to verify complete fix
+  - Run `npx tsc --noEmit` from frontend directory to verify no type errors
+  - Manually test call initiation with permission grant/deny scenarios
+  - Manually test voice message recording with permission grant/deny scenarios
+  - Manually test rapid ICE candidate exchange during call setup
+  - Manually test text messaging, image sharing, and navigation to verify preservation
+  - Ensure all tests pass, ask the user if questions arise
