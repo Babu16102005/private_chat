@@ -163,68 +163,73 @@ export const HomeScreen = ({ navigation }: any) => {
 
     return (
       <TouchableOpacity
-        style={[styles.chatRow, { borderBottomColor: colors.glassBorder, borderBottomWidth: StyleSheet.hairlineWidth }]}
+        style={styles.chatRowTouch}
         onPress={() => navigation.navigate('Chat', { pairId: item.id, partner })}
+        activeOpacity={0.78}
       >
-        <View style={styles.chatThumbWrap}>
-          <Image
-            source={avatarSource}
-            style={[styles.chatThumb, { borderRadius: colors.radius.story }]}
-          />
-          {isOnline && (
-            <View style={[styles.onlineIndicator, { backgroundColor: colors.tertiary, borderColor: colors.background }]} />
-          )}
-        </View>
-        <View style={styles.chatMain}>
-          <View style={styles.chatTopLine}>
-            <Text style={[styles.chatPartnerName, { color: colors.text }]}>{partner?.name || 'Partner'}</Text>
-            {lastMsgTime && (
-              <Text style={[styles.chatTimestamp, { color: hasUnread ? colors.primary : colors.gray }]}>
-                {formatChatListTime(lastMsgTime)}
-              </Text>
+        <BlurView intensity={colors.glassBlur + 10} tint="dark" style={[styles.chatRow, { borderColor: 'rgba(255,255,255,0.14)' }]}> 
+          <LinearGradient colors={['rgba(255,255,255,0.1)', 'rgba(115,55,185,0.2)', 'rgba(8,2,24,0.46)'] as any} style={StyleSheet.absoluteFill} />
+          <View style={styles.chatRowFrost} />
+          <View style={styles.chatThumbWrap}>
+            <View style={[styles.chatThumbGlass, { borderColor: colors.glassBorder }]}> 
+              <Image
+                source={avatarSource}
+                style={[styles.chatThumb, { borderRadius: colors.radius.story }]}
+              />
+            </View>
+            {isOnline && (
+              <View style={[styles.onlineIndicator, { backgroundColor: colors.tertiary, borderColor: 'rgba(255,255,255,0.75)' }]} />
             )}
           </View>
-          <View style={styles.snippetRow}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-              {/* Typing indicator */}
-              {isTyping ? (
-                <Text style={[styles.chatSnippet, styles.typingText, { color: colors.tertiary }]}>
-                  typing...
+          <View style={styles.chatMain}>
+            <View style={styles.chatTopLine}>
+              <Text style={[styles.chatPartnerName, { color: colors.text }]}>{partner?.name || 'Partner'}</Text>
+              {lastMsgTime && (
+                <Text style={[styles.chatTimestamp, { color: hasUnread ? colors.primary : colors.gray }]}> 
+                  {formatChatListTime(lastMsgTime)}
                 </Text>
-              ) : (
-                <>
-                  {/* "You:" prefix + delivery tick for own messages */}
-                  {isLastMsgFromMe && (
-                    <>
-                      <Text style={[styles.youPrefix, { color: hasUnread ? 'rgba(255,255,255,0.6)' : colors.gray }]}>
-                        You:{' '}
-                      </Text>
-                      {lastMsg && (
-                        <View style={styles.tickInline}>
-                          {lastMsg.read_at ? (
-                            <CheckCheck size={14} color={colors.primary} strokeWidth={2} />
-                          ) : lastMsg.delivered_at ? (
-                            <CheckCheck size={14} color={colors.gray} strokeWidth={2} />
-                          ) : (
-                            <Check size={14} color={colors.gray} strokeWidth={2} />
-                          )}
-                        </View>
-                      )}
-                    </>
-                  )}
-                  <Text style={[styles.chatSnippet, { color: hasUnread ? colors.text : colors.gray }]} numberOfLines={1}>
-                    {lastMsg?.content || 'No messages yet'}
-                  </Text>
-                </>
               )}
             </View>
-            {hasUnread && (
-              <View style={[styles.unreadBadge, { backgroundColor: colors.primary }]}>
-                <Text style={styles.unreadText}>{item.unread_count}</Text>
+            <View style={styles.snippetRow}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                {isTyping ? (
+                  <Text style={[styles.chatSnippet, styles.typingText, { color: colors.tertiary }]}> 
+                    typing...
+                  </Text>
+                ) : (
+                  <>
+                    {isLastMsgFromMe && (
+                      <>
+                        <Text style={[styles.youPrefix, { color: hasUnread ? 'rgba(255,255,255,0.72)' : colors.gray }]}> 
+                          You:{' '}
+                        </Text>
+                        {lastMsg && (
+                          <View style={styles.tickInline}>
+                            {lastMsg.read_at ? (
+                              <CheckCheck size={14} color={colors.primary} strokeWidth={2} />
+                            ) : lastMsg.delivered_at ? (
+                              <CheckCheck size={14} color={colors.gray} strokeWidth={2} />
+                            ) : (
+                              <Check size={14} color={colors.gray} strokeWidth={2} />
+                            )}
+                          </View>
+                        )}
+                      </>
+                    )}
+                    <Text style={[styles.chatSnippet, { color: hasUnread ? colors.text : colors.gray }]} numberOfLines={1}>
+                      {lastMsg?.content || 'No messages yet'}
+                    </Text>
+                  </>
+                )}
               </View>
-            )}
+              {hasUnread && (
+                <LinearGradient colors={colors.gradientSecondary as any} style={styles.unreadBadge}> 
+                  <Text style={styles.unreadText}>{item.unread_count}</Text>
+                </LinearGradient>
+              )}
+            </View>
           </View>
-        </View>
+        </BlurView>
       </TouchableOpacity>
     );
   };
@@ -308,7 +313,8 @@ export const HomeScreen = ({ navigation }: any) => {
         style={[styles.floatPlus, { bottom: Math.max(insets.bottom + 20, 30) }]}
         onPress={() => navigation.navigate('Invite')}
       >
-        <LinearGradient colors={colors.gradientSecondary as any} style={styles.floatGrad}>
+        <LinearGradient colors={colors.gradientSecondary as any} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.floatGrad}>
+          <LinearGradient colors={['rgba(255,255,255,0.7)', 'rgba(255,255,255,0)'] as any} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0.7 }} style={styles.floatShine} />
           <Plus size={28} color="white" strokeWidth={2.5} />
         </LinearGradient>
       </TouchableOpacity>
@@ -329,11 +335,14 @@ const styles = StyleSheet.create({
   searchBar: { height: 50, borderRadius: 20, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth },
   searchInput: { flex: 1, fontSize: 15 },
   listContainer: { flex: 1 },
-  listInside: { paddingBottom: 100 },
-  chatRow: { flexDirection: 'row', padding: 16, alignItems: 'center', paddingHorizontal: 20, marginHorizontal: 12, marginBottom: 10, borderRadius: 26, backgroundColor: 'rgba(255,255,255,0.09)', shadowColor: '#B94CFF', shadowOffset: { width: 0, height: 14 }, shadowOpacity: 0.2, shadowRadius: 26, elevation: 5 },
+  listInside: { paddingBottom: 100, paddingTop: 2 },
+  chatRowTouch: { marginHorizontal: 14, marginBottom: 12, borderRadius: 28, shadowColor: '#B94CFF', shadowOffset: { width: 0, height: 16 }, shadowOpacity: 0.24, shadowRadius: 30, elevation: 6 },
+  chatRow: { flexDirection: 'row', padding: 16, alignItems: 'center', paddingHorizontal: 18, borderRadius: 28, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, backgroundColor: 'rgba(18,7,42,0.5)' },
+  chatRowFrost: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(110,42,190,0.055)' },
   chatThumbWrap: { position: 'relative' },
+  chatThumbGlass: { width: 62, height: 62, borderRadius: 31, padding: 3, backgroundColor: 'rgba(255,255,255,0.09)', borderWidth: StyleSheet.hairlineWidth, shadowColor: '#B94CFF', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.2, shadowRadius: 14, elevation: 4 },
   chatThumb: { width: 56, height: 56 },
-  onlineIndicator: { position: 'absolute', bottom: 0, right: 0, width: 14, height: 14, borderRadius: 7, borderWidth: 2 },
+  onlineIndicator: { position: 'absolute', bottom: 1, right: 1, width: 15, height: 15, borderRadius: 8, borderWidth: 2 },
   chatMain: { flex: 1, marginLeft: 14 },
   chatTopLine: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 5 },
   chatPartnerName: { fontSize: 16, fontWeight: '700' },
@@ -343,11 +352,12 @@ const styles = StyleSheet.create({
   typingText: { fontStyle: 'italic', fontWeight: '600' },
   youPrefix: { fontSize: 13, fontWeight: '500' },
   tickInline: { marginRight: 4 },
-  unreadBadge: { minWidth: 20, height: 20, borderRadius: 10, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 5 },
+  unreadBadge: { minWidth: 22, height: 22, borderRadius: 11, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 6, borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255,255,255,0.38)', overflow: 'hidden' },
   unreadText: { color: 'white', fontSize: 11, fontWeight: '700' },
   emptyWrap: { height: 250, justifyContent: 'center', alignItems: 'center', gap: 10 },
   emptyLabel: { fontSize: 16, fontWeight: '600' },
   emptySublabel: { fontSize: 14, textAlign: 'center', paddingHorizontal: 40 },
-  floatPlus: { position: 'absolute', right: 20, width: 60, height: 60, borderRadius: 30, shadowColor: '#B94CFF', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.5, shadowRadius: 18, elevation: 8 },
+  floatPlus: { position: 'absolute', right: 20, width: 60, height: 60, borderRadius: 30, borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255,255,255,0.22)', backgroundColor: 'rgba(255,255,255,0.14)', shadowColor: '#B94CFF', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.42, shadowRadius: 20, elevation: 8 },
   floatGrad: { flex: 1, borderRadius: 30, justifyContent: 'center', alignItems: 'center' },
+  floatShine: { position: 'absolute', top: 2, left: 9, right: 9, height: 20, borderRadius: 999, opacity: 0.34 },
 });

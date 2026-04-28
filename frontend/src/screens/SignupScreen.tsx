@@ -89,8 +89,9 @@ export const SignupScreen = ({ navigation }: any) => {
               />
             </BlurView>
 
-            <TouchableOpacity style={[styles.signUpBtn, { borderRadius: 14 }]} onPress={handleSignup} disabled={loading}>
-              <LinearGradient colors={colors.gradientSecondary as any} style={styles.signUpGrad}>
+            <TouchableOpacity style={[styles.signUpBtn, { borderRadius: 22, borderColor: colors.glassBorder }]} onPress={handleSignup} disabled={loading}>
+              <LinearGradient colors={colors.gradientSecondary as any} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.signUpGrad}>
+                <LinearGradient colors={['rgba(255,255,255,0.7)', 'rgba(255,255,255,0)'] as any} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0.7 }} style={styles.buttonShine} />
                 {loading ? <Text style={styles.btnText}>Creating...</Text> : (
                   <>
                     <Text style={styles.btnText}>Create Account</Text>
@@ -128,8 +129,9 @@ const styles = StyleSheet.create({
   form: { gap: 14 },
   inputWrap: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, height: 56, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth },
   input: { flex: 1, fontSize: 16 },
-  signUpBtn: { height: 56, overflow: 'hidden', marginTop: 8, shadowColor: '#D946EF', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.4, shadowRadius: 18, elevation: 7 },
+  signUpBtn: { height: 56, overflow: 'hidden', marginTop: 8, borderWidth: 1, backgroundColor: 'rgba(255,255,255,0.14)', shadowColor: '#D946EF', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.34, shadowRadius: 22, elevation: 7 },
   signUpGrad: { flex: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'center' },
+  buttonShine: { position: 'absolute', top: 1, left: 8, right: 8, height: 20, borderRadius: 999, opacity: 0.34 },
   btnText: { color: '#FFFFFF', fontWeight: '700', fontSize: 16 },
   loginBtn: { paddingTop: 8, alignItems: 'center' },
   loginText: { fontSize: 14, textAlign: 'center' },

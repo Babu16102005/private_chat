@@ -74,9 +74,9 @@ export const InviteScreen = () => {
     <View style={[styles.container, { backgroundColor: colors.background }]}> 
       <View style={StyleSheet.absoluteFill}>
         <LinearGradient colors={colors.gradientPrimary as any} style={StyleSheet.absoluteFill} />
-        <LinearGradient colors={['rgba(185, 76, 255, 0.46)', 'transparent'] as any} style={[styles.glowBall, { top: -130, right: -90, width: 360, height: 360 }]} />
-        <LinearGradient colors={['rgba(37, 214, 255, 0.24)', 'transparent'] as any} style={[styles.glowBall, { top: height * 0.34, left: -140, width: 320, height: 320 }]} />
-        <LinearGradient colors={['rgba(255, 122, 92, 0.18)', 'transparent'] as any} style={[styles.glowBall, { bottom: -90, right: -80, width: 280, height: 280 }]} />
+        <LinearGradient colors={['rgba(185, 76, 255, 0.58)', 'transparent'] as any} style={[styles.glowBall, { top: -130, right: -90, width: 360, height: 360 }]} />
+        <LinearGradient colors={['rgba(96, 42, 255, 0.34)', 'transparent'] as any} style={[styles.glowBall, { top: height * 0.3, left: -140, width: 340, height: 340 }]} />
+        <LinearGradient colors={['rgba(37, 214, 255, 0.16)', 'transparent'] as any} style={[styles.glowBall, { bottom: -90, right: -80, width: 280, height: 280 }]} />
       </View>
 
       {/* Header */}
@@ -89,9 +89,12 @@ export const InviteScreen = () => {
       </BlurView>
 
       <View style={styles.content}>
-        <BlurView intensity={colors.glassBlur} tint={isDark ? 'dark' : 'light'} style={[styles.glassPanel, { borderColor: colors.glassBorder }]}> 
+        <BlurView intensity={colors.glassBlur + 16} tint="dark" style={[styles.glassPanel, { borderColor: 'rgba(255,255,255,0.14)' }]}> 
+          <LinearGradient colors={['rgba(255,255,255,0.09)', 'rgba(128,61,214,0.2)', 'rgba(46,17,92,0.42)', 'rgba(11,3,28,0.34)'] as any} style={StyleSheet.absoluteFill} />
+          <View style={styles.frostFill} />
           <View style={styles.iconWrap}>
-          <View style={[styles.iconCircle, { backgroundColor: 'rgba(255,255,255,0.1)', borderColor: colors.glassBorder }]}> 
+          <View style={[styles.iconCircle, { borderColor: 'rgba(255,255,255,0.14)' }]}> 
+            <LinearGradient colors={['rgba(255,255,255,0.13)', 'rgba(136,66,255,0.2)', 'rgba(18,5,48,0.35)'] as any} style={StyleSheet.absoluteFill} />
             <UserPlus size={36} color={colors.primary} strokeWidth={1.5} />
           </View>
           </View>
@@ -101,7 +104,8 @@ export const InviteScreen = () => {
             Send an invite to your partner with their email address. Once they accept, you&apos;ll be connected in a private chat.
           </Text>
 
-        <BlurView intensity={colors.glassBlur + 8} tint={isDark ? 'dark' : 'light'} style={[styles.inputWrap, { backgroundColor: 'rgba(255,255,255,0.1)', borderColor: colors.glassBorder, borderRadius: 22 }]}> 
+        <BlurView intensity={colors.glassBlur + 14} tint="dark" style={[styles.inputWrap, { backgroundColor: 'rgba(24,8,56,0.54)', borderColor: 'rgba(255,255,255,0.13)', borderRadius: 24 }]}> 
+          <LinearGradient colors={['rgba(255,255,255,0.08)', 'rgba(121,58,210,0.18)', 'rgba(10,2,30,0.28)'] as any} style={StyleSheet.absoluteFill} />
           <Mail size={20} color={colors.gray} style={{ marginRight: 12 }} />
           <TextInput
             style={[styles.input, { color: colors.text }]}
@@ -114,8 +118,9 @@ export const InviteScreen = () => {
           />
         </BlurView>
 
-        <TouchableOpacity style={[styles.inviteBtn, { borderRadius: 14 }]} onPress={sendInvite} disabled={loading}>
-          <LinearGradient colors={colors.gradientSecondary as any} style={styles.inviteGrad}>
+        <TouchableOpacity style={[styles.inviteBtn, { borderRadius: 22, borderColor: 'rgba(255,255,255,0.16)' }]} onPress={sendInvite} disabled={loading}>
+          <LinearGradient colors={colors.gradientSecondary as any} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.inviteGrad}>
+            <LinearGradient colors={['rgba(255,255,255,0.7)', 'rgba(255,255,255,0)'] as any} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0.7 }} style={styles.buttonShine} />
             <Text style={styles.btnText}>
               {loading ? 'Sending Invite...' : 'Send Invite'}
             </Text>
@@ -140,15 +145,17 @@ const styles = StyleSheet.create({
   backBtn: { width: 40, height: 40, borderRadius: 18, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.08)', borderWidth: StyleSheet.hairlineWidth },
   topBarTitle: { fontSize: 20, fontWeight: '700' },
   content: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 24, gap: 20 },
-  glassPanel: { width: '100%', borderRadius: 32, padding: 24, alignItems: 'center', gap: 20, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, backgroundColor: 'rgba(255,255,255,0.08)', shadowColor: '#B94CFF', shadowOffset: { width: 0, height: 18 }, shadowOpacity: 0.28, shadowRadius: 30, elevation: 8 },
+  glassPanel: { width: '100%', borderRadius: 36, padding: 24, alignItems: 'center', gap: 20, overflow: 'hidden', borderWidth: 1, backgroundColor: 'rgba(28,10,62,0.46)', shadowColor: '#B94CFF', shadowOffset: { width: 0, height: 24 }, shadowOpacity: 0.34, shadowRadius: 38, elevation: 10 },
+  frostFill: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(126,55,218,0.075)' },
   iconWrap: { marginBottom: 8 },
-  iconCircle: { width: 84, height: 84, borderRadius: 42, justifyContent: 'center', alignItems: 'center', borderWidth: StyleSheet.hairlineWidth },
+  iconCircle: { width: 84, height: 84, borderRadius: 42, justifyContent: 'center', alignItems: 'center', borderWidth: StyleSheet.hairlineWidth, overflow: 'hidden', backgroundColor: 'rgba(24,8,56,0.48)' },
   title: { fontSize: 28, fontWeight: '800', textAlign: 'center' },
   subtitle: { fontSize: 15, textAlign: 'center', lineHeight: 22 },
-  inputWrap: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, height: 56, width: '100%', overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth },
+  inputWrap: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, height: 58, width: '100%', overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, shadowColor: '#B94CFF', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.18, shadowRadius: 18, elevation: 4 },
   input: { flex: 1, fontSize: 16 },
-  inviteBtn: { height: 56, overflow: 'hidden', width: '100%', shadowColor: '#D946EF', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.4, shadowRadius: 18, elevation: 7 },
+  inviteBtn: { height: 56, overflow: 'hidden', width: '100%', borderWidth: 1, backgroundColor: 'rgba(255,255,255,0.14)', shadowColor: '#D946EF', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.34, shadowRadius: 22, elevation: 7 },
   inviteGrad: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  buttonShine: { position: 'absolute', top: 1, left: 8, right: 8, height: 20, borderRadius: 999, opacity: 0.34 },
   btnText: { color: '#FFFFFF', fontWeight: '700', fontSize: 16 },
   signOutBtn: { marginTop: 12 },
   signOutText: { fontSize: 14, textAlign: 'center' },

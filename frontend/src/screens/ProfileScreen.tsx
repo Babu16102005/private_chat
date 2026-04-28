@@ -157,7 +157,9 @@ export const ProfileScreen = ({ navigation }: any) => {
 
       <ScrollView contentContainerStyle={styles.scrollArea} showsVerticalScrollIndicator={false}>
         {/* Profile card */}
-        <BlurView intensity={colors.glassBlur} tint={isDark ? 'dark' : 'light'} style={[styles.profileCard, { borderColor: colors.glassBorder }]}> 
+        <BlurView intensity={colors.glassBlur + 10} tint="dark" style={[styles.profileCard, { borderColor: 'rgba(255,255,255,0.16)' }]}> 
+          <LinearGradient colors={['rgba(255,255,255,0.12)', 'rgba(115,55,185,0.22)', 'rgba(10,2,28,0.52)'] as any} style={StyleSheet.absoluteFill} />
+          <View style={styles.frostFill} />
           <View style={styles.profileTop}>
             <TouchableOpacity activeOpacity={0.8} onPress={pickAvatar} style={styles.avatarButton}>
               <Image
@@ -224,13 +226,16 @@ export const ProfileScreen = ({ navigation }: any) => {
               />
             </View>
             <TouchableOpacity
-              style={[styles.updatePwdBtn, { borderRadius: 12, opacity: newPassword.length < 6 || loading ? 0.5 : 1 }]}
+              style={[styles.updatePwdBtn, { borderRadius: 20, borderColor: colors.glassBorder, opacity: newPassword.length < 6 || loading ? 0.5 : 1 }]}
               onPress={handleChangePassword}
               disabled={newPassword.length < 6 || loading}
             >
-              <Text style={[styles.updatePwdText, { color: loading ? colors.gray : colors.text }]}>
-                {loading ? 'Updating...' : 'Update Password'}
-              </Text>
+              <LinearGradient colors={colors.gradientSecondary as any} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.profileButtonGradient}>
+                <LinearGradient colors={['rgba(255,255,255,0.7)', 'rgba(255,255,255,0)'] as any} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0.7 }} style={styles.buttonShine} />
+                <Text style={[styles.updatePwdText, { color: loading ? colors.gray : colors.text }]}> 
+                  {loading ? 'Updating...' : 'Update Password'}
+                </Text>
+              </LinearGradient>
             </TouchableOpacity>
           </View>
         </SettingSection>
@@ -265,8 +270,11 @@ export const ProfileScreen = ({ navigation }: any) => {
               autoFocus
             />
             <Text style={[styles.charCount, { color: colors.gray }]}>{nameText.length}/40</Text>
-            <TouchableOpacity style={[styles.modalSaveBtn, { backgroundColor: colors.primary, opacity: loading ? 0.5 : 1 }]} onPress={() => updateProfile()} disabled={loading}>
-              <Text style={styles.modalSaveText}>{loading ? 'Saving...' : 'Save'}</Text>
+            <TouchableOpacity style={[styles.modalSaveBtn, { borderColor: colors.glassBorder, opacity: loading ? 0.5 : 1 }]} onPress={() => updateProfile()} disabled={loading}>
+              <LinearGradient colors={colors.gradientSecondary as any} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.profileButtonGradient}>
+                <LinearGradient colors={['rgba(255,255,255,0.7)', 'rgba(255,255,255,0)'] as any} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0.7 }} style={styles.buttonShine} />
+                <Text style={styles.modalSaveText}>{loading ? 'Saving...' : 'Save'}</Text>
+              </LinearGradient>
             </TouchableOpacity>
           </BlurView>
         </View>
@@ -291,8 +299,11 @@ export const ProfileScreen = ({ navigation }: any) => {
               autoFocus
             />
             <Text style={[styles.charCount, { color: colors.gray }]}>{aboutText.length}/139</Text>
-            <TouchableOpacity style={[styles.modalSaveBtn, { backgroundColor: colors.primary, opacity: loading ? 0.5 : 1 }]} onPress={saveAbout} disabled={loading}>
-              <Text style={styles.modalSaveText}>{loading ? 'Saving...' : 'Save'}</Text>
+            <TouchableOpacity style={[styles.modalSaveBtn, { borderColor: colors.glassBorder, opacity: loading ? 0.5 : 1 }]} onPress={saveAbout} disabled={loading}>
+              <LinearGradient colors={colors.gradientSecondary as any} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.profileButtonGradient}>
+                <LinearGradient colors={['rgba(255,255,255,0.7)', 'rgba(255,255,255,0)'] as any} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0.7 }} style={styles.buttonShine} />
+                <Text style={styles.modalSaveText}>{loading ? 'Saving...' : 'Save'}</Text>
+              </LinearGradient>
             </TouchableOpacity>
           </BlurView>
         </View>
@@ -341,13 +352,14 @@ const styles = StyleSheet.create({
   scrollArea: { paddingHorizontal: 16, paddingTop: 16 },
 
   // Profile card
-  profileCard: { padding: 16, borderRadius: 28, marginBottom: 28, overflow: 'hidden', backgroundColor: 'rgba(255,255,255,0.08)', borderWidth: StyleSheet.hairlineWidth, shadowColor: '#B94CFF', shadowOffset: { width: 0, height: 14 }, shadowOpacity: 0.22, shadowRadius: 26, elevation: 5 },
+  profileCard: { padding: 18, borderRadius: 34, marginBottom: 28, overflow: 'hidden', backgroundColor: 'rgba(18,7,42,0.58)', borderWidth: 1, shadowColor: '#B94CFF', shadowOffset: { width: 0, height: 24 }, shadowOpacity: 0.32, shadowRadius: 36, elevation: 10 },
+  frostFill: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(110,42,190,0.08)' },
   profileTop: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  avatarButton: { position: 'relative' },
-  profileAvatar: { width: 64, height: 64, borderWidth: StyleSheet.hairlineWidth },
-  avatarEditBadge: { position: 'absolute', right: -2, bottom: -2, width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: 'rgba(0,0,0,0.25)' },
+  avatarButton: { position: 'relative', borderRadius: 38, padding: 4, backgroundColor: 'rgba(255,255,255,0.1)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)', shadowColor: '#B94CFF', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.22, shadowRadius: 16, elevation: 5 },
+  profileAvatar: { width: 66, height: 66, borderWidth: StyleSheet.hairlineWidth },
+  avatarEditBadge: { position: 'absolute', right: -2, bottom: -2, width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: 'rgba(255,255,255,0.35)', shadowColor: '#B94CFF', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.35, shadowRadius: 10, elevation: 5 },
   profileInfo: { flex: 1 },
-  profileName: { fontSize: 18, fontWeight: '700' },
+  profileName: { fontSize: 19, fontWeight: '800', letterSpacing: 0.2 },
   profileEmail: { fontSize: 13, marginTop: 2 },
   aboutRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 },
   profileAbout: { fontSize: 13, flex: 1 },
@@ -372,7 +384,9 @@ const styles = StyleSheet.create({
   inputLabel: { fontSize: 15, fontWeight: '500', marginLeft: 10 },
   passwordInputWrap: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, height: 46, marginBottom: 12, borderWidth: StyleSheet.hairlineWidth },
   passwordInput: { flex: 1, fontSize: 15, fontWeight: '400' },
-  updatePwdBtn: { height: 46, alignItems: 'center', justifyContent: 'center' },
+  updatePwdBtn: { height: 46, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, backgroundColor: 'rgba(255,255,255,0.12)' },
+  profileButtonGradient: { flex: 1, alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center' },
+  buttonShine: { position: 'absolute', top: 1, left: 8, right: 8, height: 18, borderRadius: 999, opacity: 0.34 },
   updatePwdText: { fontSize: 15, fontWeight: '600' },
 
   // Logout
@@ -386,6 +400,6 @@ const styles = StyleSheet.create({
   modalTitle: { fontSize: 18, fontWeight: '700' },
   aboutInput: { fontSize: 15, borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, minHeight: 44, textAlignVertical: 'top' },
   charCount: { fontSize: 12, textAlign: 'right', marginTop: 6 },
-  modalSaveBtn: { borderRadius: 12, paddingVertical: 14, marginTop: 16, alignItems: 'center' },
+  modalSaveBtn: { borderRadius: 20, height: 48, marginTop: 16, alignItems: 'center', overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, backgroundColor: 'rgba(255,255,255,0.12)' },
   modalSaveText: { color: '#FFFFFF', fontWeight: '700', fontSize: 16 },
 });

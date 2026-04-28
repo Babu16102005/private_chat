@@ -35,7 +35,9 @@ export const LoginScreen = ({ navigation }: any) => {
           <LinearGradient colors={['rgba(255, 122, 92, 0.18)', 'transparent'] as any} style={[styles.glowBall, { bottom: -90, right: -80, width: 280, height: 280 }]} />
         </View>
         <ScrollView contentContainerStyle={styles.scrollArea} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-          <BlurView intensity={colors.glassBlur} tint={isDark ? 'dark' : 'light'} style={[styles.authPanel, { borderColor: colors.glassBorder }]}> 
+          <BlurView intensity={colors.glassBlur + 10} tint="dark" style={[styles.authPanel, { borderColor: 'rgba(255,255,255,0.16)' }]}> 
+            <LinearGradient colors={['rgba(255,255,255,0.12)', 'rgba(115,55,185,0.22)', 'rgba(10,2,28,0.52)'] as any} style={StyleSheet.absoluteFill} />
+            <View style={styles.frostFill} />
             <View style={styles.topSection}>
               <Text style={[styles.brandText, { color: colors.primary }]}>CoupleChat</Text>
               <Text style={[styles.title, { color: colors.text }]}>Welcome back</Text>
@@ -43,7 +45,8 @@ export const LoginScreen = ({ navigation }: any) => {
             </View>
 
             <View style={styles.form}>
-            <BlurView intensity={colors.glassBlur + 8} tint={isDark ? 'dark' : 'light'} style={[styles.inputWrap, { backgroundColor: 'rgba(255,255,255,0.1)', borderColor: colors.glassBorder, borderRadius: 22 }]}> 
+            <BlurView intensity={colors.glassBlur + 8} tint="dark" style={[styles.inputWrap, { backgroundColor: 'rgba(32,14,65,0.5)', borderColor: 'rgba(255,255,255,0.14)', borderRadius: 24 }]}> 
+              <LinearGradient colors={['rgba(255,255,255,0.1)', 'rgba(137,67,255,0.16)', 'rgba(8,2,24,0.22)'] as any} style={StyleSheet.absoluteFill} />
               <Mail size={20} color={colors.gray} style={{ marginRight: 12 }} />
               <TextInput
                 style={[styles.input, { color: colors.text }]}
@@ -56,7 +59,8 @@ export const LoginScreen = ({ navigation }: any) => {
               />
             </BlurView>
 
-            <BlurView intensity={colors.glassBlur + 8} tint={isDark ? 'dark' : 'light'} style={[styles.inputWrap, { backgroundColor: 'rgba(255,255,255,0.1)', borderColor: colors.glassBorder, borderRadius: 22 }]}> 
+            <BlurView intensity={colors.glassBlur + 8} tint="dark" style={[styles.inputWrap, { backgroundColor: 'rgba(32,14,65,0.5)', borderColor: 'rgba(255,255,255,0.14)', borderRadius: 24 }]}> 
+              <LinearGradient colors={['rgba(255,255,255,0.1)', 'rgba(137,67,255,0.16)', 'rgba(8,2,24,0.22)'] as any} style={StyleSheet.absoluteFill} />
               <Lock size={20} color={colors.gray} style={{ marginRight: 12 }} />
               <TextInput
                 style={[styles.input, { color: colors.text }]}
@@ -72,8 +76,9 @@ export const LoginScreen = ({ navigation }: any) => {
               <Text style={[styles.forgotText, { color: colors.primary }]}>Forgot password?</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={[styles.signInBtn, { borderRadius: 14 }]} onPress={handleLogin} disabled={loading}>
-              <LinearGradient colors={colors.gradientSecondary as any} style={styles.signInGrad}>
+            <TouchableOpacity style={[styles.signInBtn, { borderRadius: 22, borderColor: colors.glassBorder }]} onPress={handleLogin} disabled={loading}>
+              <LinearGradient colors={colors.gradientSecondary as any} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.signInGrad}>
+                <LinearGradient colors={['rgba(255,255,255,0.7)', 'rgba(255,255,255,0)'] as any} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0.7 }} style={styles.buttonShine} />
                 {loading ? <Text style={styles.btnText}>Signing in...</Text> : (
                   <>
                     <Text style={styles.btnText}>Sign In</Text>
@@ -102,18 +107,20 @@ const styles = StyleSheet.create({
   inner: { flex: 1 },
   glowBall: { position: 'absolute', borderRadius: 180, overflow: 'hidden' },
   scrollArea: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: 24, paddingTop: 60, paddingBottom: 40 },
-  authPanel: { borderRadius: 32, padding: 24, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, backgroundColor: 'rgba(255,255,255,0.08)', shadowColor: '#B94CFF', shadowOffset: { width: 0, height: 18 }, shadowOpacity: 0.28, shadowRadius: 30, elevation: 8 },
+  authPanel: { borderRadius: 36, padding: 24, overflow: 'hidden', borderWidth: 1, backgroundColor: 'rgba(18,7,42,0.58)', shadowColor: '#B94CFF', shadowOffset: { width: 0, height: 24 }, shadowOpacity: 0.32, shadowRadius: 36, elevation: 10 },
+  frostFill: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(110,42,190,0.08)' },
   topSection: { marginBottom: 36 },
   brandText: { fontSize: 14, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 2, marginBottom: 24 },
   title: { fontSize: 34, fontWeight: '800', marginBottom: 8 },
   subtitle: { fontSize: 16, fontWeight: '400' },
   form: { gap: 14 },
-  inputWrap: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, height: 56, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth },
+  inputWrap: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, height: 58, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, shadowColor: '#25D6FF', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.16, shadowRadius: 18, elevation: 4 },
   input: { flex: 1, fontSize: 16 },
   forgotBtn: { alignSelf: 'flex-end', paddingVertical: 6 },
   forgotText: { fontSize: 14, fontWeight: '600' },
-  signInBtn: { height: 56, overflow: 'hidden', marginTop: 8, shadowColor: '#D946EF', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.4, shadowRadius: 18, elevation: 7 },
+  signInBtn: { height: 56, overflow: 'hidden', marginTop: 8, borderWidth: 1, backgroundColor: 'rgba(255,255,255,0.14)', shadowColor: '#D946EF', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.34, shadowRadius: 22, elevation: 7 },
   signInGrad: { flex: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'center' },
+  buttonShine: { position: 'absolute', top: 1, left: 8, right: 8, height: 20, borderRadius: 999, opacity: 0.34 },
   btnText: { color: '#FFFFFF', fontWeight: '700', fontSize: 16 },
   signUpBtn: { marginTop: 12, paddingTop: 8, alignItems: 'center' },
   signUpText: { fontSize: 14, textAlign: 'center' },

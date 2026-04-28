@@ -34,20 +34,20 @@ const obsidianTheme: ThemeColors = {
   primary: '#B94CFF', // Neon orchid
   secondary: '#25D6FF', 
   tertiary: '#33FFB7', // Online glow
-  background: '#07030F',
-  bubbleSentBg: 'rgba(255, 255, 255, 0.18)',
-  bubbleReceivedBg: 'rgba(44, 15, 88, 0.64)',
+  background: '#05000D',
+  bubbleSentBg: 'rgba(115, 66, 168, 0.42)',
+  bubbleReceivedBg: 'rgba(18, 8, 42, 0.58)',
   white: '#FFFFFF',
   black: '#000000',
   gray: '#A1A1A1',
   lightGray: 'rgba(255, 255, 255, 0.05)',
   text: '#FFFFFF',
-  gradientPrimary: ['#120029', '#07030F', '#050009'],
-  gradientSecondary: ['#D946EF', '#7D5CFF', '#25D6FF'],
-  glassBorder: 'rgba(255, 255, 255, 0.22)',
+  gradientPrimary: ['#210044', '#0B0620', '#020006'],
+  gradientSecondary: ['rgba(255,255,255,0.08)', 'rgba(255,255,255,0.3)', 'rgba(167,64,255,0.26)', 'rgba(255,255,255,0.08)'],
+  glassBorder: 'rgba(255, 255, 255, 0.15)',
   borderWidth: StyleSheet.hairlineWidth,
   glassOpacity: 0.16,
-  glassBlur: 32,
+  glassBlur: 40,
   radius: {
     pill: 999,
     panel: 40,
@@ -61,20 +61,20 @@ const mochaTheme: ThemeColors = {
   primary: '#FF7A5C', // Living coral
   secondary: '#FF3B86', 
   tertiary: '#FFD36E', 
-  background: '#1A1017', // Warm plum espresso
-  bubbleSentBg: 'rgba(255, 255, 255, 0.2)', // Glass dark
-  bubbleReceivedBg: 'rgba(76, 28, 58, 0.62)', // Glass frosted
+  background: '#09010C', // Warm plum espresso
+  bubbleSentBg: 'rgba(126, 57, 126, 0.42)', // Glass dark
+  bubbleReceivedBg: 'rgba(26, 8, 32, 0.58)', // Glass frosted
   white: 'rgba(255, 255, 255, 0.8)',
   black: '#100D0C',
   gray: 'rgba(255, 255, 255, 0.5)',
   lightGray: 'rgba(255, 255, 255, 0.05)',
   text: '#FDF7F2',
-  gradientPrimary: ['#422041', '#1A1017', '#090408'], // Warm depth gradient
-  gradientSecondary: ['#FF8A65', '#FF3B86', '#7D5CFF'],
-  glassBorder: 'rgba(255, 255, 255, 0.2)',
+  gradientPrimary: ['#2C0B32', '#0B0614', '#020006'], // Warm depth gradient
+  gradientSecondary: ['rgba(255,255,255,0.08)', 'rgba(255,255,255,0.28)', 'rgba(255,89,170,0.24)', 'rgba(255,255,255,0.08)'],
+  glassBorder: 'rgba(255, 255, 255, 0.15)',
   borderWidth: StyleSheet.hairlineWidth,
   glassOpacity: 0.1,
-  glassBlur: 32, // Strong glass frosted
+  glassBlur: 40, // Strong glass frosted
   radius: {
     pill: 30,
     panel: 40,

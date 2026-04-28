@@ -58,8 +58,9 @@ export const ForgotPasswordScreen = ({ navigation }: any) => {
             />
           </BlurView>
 
-          <TouchableOpacity style={[styles.sendBtn, { borderRadius: 14 }]} onPress={handleReset} disabled={loading}>
-            <LinearGradient colors={colors.gradientSecondary as any} style={styles.sendGrad}>
+          <TouchableOpacity style={[styles.sendBtn, { borderRadius: 22, borderColor: colors.glassBorder }]} onPress={handleReset} disabled={loading}>
+            <LinearGradient colors={colors.gradientSecondary as any} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.sendGrad}>
+              <LinearGradient colors={['rgba(255,255,255,0.7)', 'rgba(255,255,255,0)'] as any} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0.7 }} style={styles.buttonShine} />
               {loading ? <Text style={styles.btnText}>Sending...</Text> : (
                 <>
                   <Text style={styles.btnText}>Send Reset Link</Text>
@@ -94,8 +95,9 @@ const styles = StyleSheet.create({
   subtitle: { fontSize: 15, lineHeight: 22, fontWeight: '400' },
   inputWrap: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, height: 56, marginBottom: 4, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth },
   input: { flex: 1, fontSize: 16 },
-  sendBtn: { overflow: 'hidden', height: 56, shadowColor: '#D946EF', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.4, shadowRadius: 18, elevation: 7 },
+  sendBtn: { overflow: 'hidden', height: 56, borderWidth: 1, backgroundColor: 'rgba(255,255,255,0.14)', shadowColor: '#D946EF', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.34, shadowRadius: 22, elevation: 7 },
   sendGrad: { flex: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'center' },
+  buttonShine: { position: 'absolute', top: 1, left: 8, right: 8, height: 20, borderRadius: 999, opacity: 0.34 },
   btnText: { color: '#FFFFFF', fontWeight: '700', fontSize: 16 },
   backToLoginBtn: { paddingTop: 8, alignItems: 'center' },
   backToLoginText: { fontSize: 14, textAlign: 'center' },

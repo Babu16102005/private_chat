@@ -703,8 +703,9 @@ export const ChatScreen = ({ route, navigation }: any) => {
             </View>
 
             {input.trim() ? (
-              <TouchableOpacity style={styles.sendBtn} onPress={() => sendMessage(input)}>
-                <LinearGradient colors={colors.gradientSecondary as any} style={styles.sendBtnGradient}>
+              <TouchableOpacity style={[styles.sendBtn, { borderColor: colors.glassBorder }]} onPress={() => sendMessage(input)}>
+                <LinearGradient colors={colors.gradientSecondary as any} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.sendBtnGradient}>
+                  <LinearGradient colors={['rgba(255,255,255,0.7)', 'rgba(255,255,255,0)'] as any} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0.7 }} style={styles.sendBtnShine} />
                   <SendHorizontal size={18} color="white" strokeWidth={2.5} />
                 </LinearGradient>
               </TouchableOpacity>
@@ -772,8 +773,9 @@ const styles = StyleSheet.create({
   inputIconButton: { borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.08)', borderWidth: StyleSheet.hairlineWidth },
   inputTextWrap: { flex: 1, minHeight: 40, justifyContent: 'center', paddingHorizontal: 8 },
   inputField: { flex: 1, paddingHorizontal: 8, paddingTop: 9, paddingBottom: 8, fontSize: 15, fontWeight: '500', maxHeight: 104, minHeight: 40, textAlignVertical: 'center', letterSpacing: 0.1 },
-  sendBtn: { width: 40, height: 40, borderRadius: 20, marginLeft: 2, shadowColor: '#D946EF', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.4, shadowRadius: 12, elevation: 6 },
+  sendBtn: { width: 40, height: 40, borderRadius: 20, marginLeft: 2, borderWidth: StyleSheet.hairlineWidth, backgroundColor: 'rgba(255,255,255,0.14)', shadowColor: '#D946EF', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.34, shadowRadius: 14, elevation: 6 },
   sendBtnGradient: { flex: 1, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
+  sendBtnShine: { position: 'absolute', top: 1, left: 5, right: 5, height: 13, borderRadius: 999, opacity: 0.34 },
 
   // Empty chat
   emptyChat: { alignItems: 'center', justifyContent: 'center', paddingVertical: 80, paddingHorizontal: 40 },
