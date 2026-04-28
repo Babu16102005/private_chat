@@ -31,23 +31,23 @@ export interface ThemeColors {
 }
 
 const obsidianTheme: ThemeColors = {
-  primary: '#7D5CFF', // Electric Violet
-  secondary: '#FF4B4B', 
-  tertiary: '#FF734E', // Orange notification badge
-  background: '#0B0B0B',
-  bubbleSentBg: '#1A1A1A',
-  bubbleReceivedBg: '#7D5CFF',
+  primary: '#B94CFF', // Neon orchid
+  secondary: '#25D6FF', 
+  tertiary: '#33FFB7', // Online glow
+  background: '#07030F',
+  bubbleSentBg: 'rgba(255, 255, 255, 0.18)',
+  bubbleReceivedBg: 'rgba(44, 15, 88, 0.64)',
   white: '#FFFFFF',
   black: '#000000',
   gray: '#A1A1A1',
   lightGray: 'rgba(255, 255, 255, 0.05)',
   text: '#FFFFFF',
-  gradientPrimary: ['#0B0B0B', '#0B0B0B', '#0B0B0B'],
-  gradientSecondary: ['#7D5CFF', '#5C3CFF'],
-  glassBorder: 'transparent', // Solid, no glass borders
-  borderWidth: 0,
-  glassOpacity: 1, // Opaque layers
-  glassBlur: 0, // No blur
+  gradientPrimary: ['#120029', '#07030F', '#050009'],
+  gradientSecondary: ['#D946EF', '#7D5CFF', '#25D6FF'],
+  glassBorder: 'rgba(255, 255, 255, 0.22)',
+  borderWidth: StyleSheet.hairlineWidth,
+  glassOpacity: 0.16,
+  glassBlur: 32,
   radius: {
     pill: 999,
     panel: 40,
@@ -58,23 +58,23 @@ const obsidianTheme: ThemeColors = {
 };
 
 const mochaTheme: ThemeColors = {
-  primary: '#FF6B4A', // Living coral
-  secondary: '#FF3B30', 
-  tertiary: '#FF6B4A', 
-  background: '#1E1B1B', // Base warm espresso
-  bubbleSentBg: 'rgba(0, 0, 0, 0.4)', // Glass dark
-  bubbleReceivedBg: 'rgba(255, 255, 255, 0.1)', // Glass frosted
+  primary: '#FF7A5C', // Living coral
+  secondary: '#FF3B86', 
+  tertiary: '#FFD36E', 
+  background: '#1A1017', // Warm plum espresso
+  bubbleSentBg: 'rgba(255, 255, 255, 0.2)', // Glass dark
+  bubbleReceivedBg: 'rgba(76, 28, 58, 0.62)', // Glass frosted
   white: 'rgba(255, 255, 255, 0.8)',
   black: '#100D0C',
   gray: 'rgba(255, 255, 255, 0.5)',
   lightGray: 'rgba(255, 255, 255, 0.05)',
   text: '#FDF7F2',
-  gradientPrimary: ['#302624', '#1E1B1A', '#0A0909'], // Warm depth gradient
-  gradientSecondary: ['#FF6B4A', '#D24119'],
-  glassBorder: 'rgba(255, 255, 255, 0.08)',
+  gradientPrimary: ['#422041', '#1A1017', '#090408'], // Warm depth gradient
+  gradientSecondary: ['#FF8A65', '#FF3B86', '#7D5CFF'],
+  glassBorder: 'rgba(255, 255, 255, 0.2)',
   borderWidth: StyleSheet.hairlineWidth,
   glassOpacity: 0.1,
-  glassBlur: 15, // Medium glass frosted
+  glassBlur: 32, // Strong glass frosted
   radius: {
     pill: 30,
     panel: 40,

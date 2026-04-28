@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Modal, View, Image, TouchableOpacity, StyleSheet, Dimensions, Text, StatusBar, Platform } from 'react-native';
+import { Modal, View, Image, TouchableOpacity, StyleSheet, Dimensions, Text, StatusBar, Platform, Alert } from 'react-native';
 import { Audio } from 'expo-av';
 
 const { height } = Dimensions.get('window');
@@ -35,6 +35,8 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({ uri, visible, onClose,
       setIsPlaying(true);
     } catch (error) {
       console.error('Failed to play audio:', error);
+      Alert.alert('Playback failed', 'Could not play this voice message. Please check your connection and try again.');
+      setIsPlaying(false);
     }
   };
 

@@ -588,13 +588,13 @@ describe('Property 2: Preservation - Non-Call Features Remain Unchanged', () => 
           fc.record({
             userId: fc.uuid(),
             isOnline: fc.boolean(),
-            onlineAt: fc.date(),
+            onlineAt: fc.integer({ min: new Date('2020-01-01').getTime(), max: new Date('2030-12-31').getTime() }),
           }),
           (input) => {
             // Simulate presence tracking
             const presenceData = {
               user_id: input.userId,
-              online_at: input.onlineAt.toISOString(),
+              online_at: new Date(input.onlineAt).toISOString(),
             };
 
             // Verify presence structure

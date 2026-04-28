@@ -41,7 +41,31 @@ const WebVideo = ({ stream, muted, style }: { stream: MediaStream; muted?: boole
 
   if (Platform.OS !== 'web') return null;
 
-  return <video ref={videoRef} autoPlay playsInline muted={muted} style={style} />;
+  return <video ref={videoRef} autoPlay playsInline muted={muted} style={StyleSheet.flatten(style)} />;
+};
+
+const WebAudio = ({ stream }: { stream: MediaStream }) => {
+  const audioRef = useRef<any>(null);
+
+  useEffect(() => {
+    if (Platform.OS !== 'web' || !audioRef.current) return;
+
+    audioRef.current.srcObject = stream;
+
+    const playAudio = async () => {
+      try {
+        await audioRef.current.play();
+      } catch (error) {
+        console.warn('Audio autoplay prevented:', error);
+      }
+    };
+
+    playAudio();
+  }, [stream]);
+
+  if (Platform.OS !== 'web') return null;
+
+  return <audio ref={audioRef} autoPlay playsInline style={{ display: 'none' }} />;
 };
 
 export const CallScreen = () => {
@@ -86,6 +110,7 @@ export const CallScreen = () => {
   return (
     <View style={styles.container}>
       {/* Remote Video (Full Screen) */}
+      {Platform.OS === 'web' && remoteStream && !isVideoCall && <WebAudio stream={remoteStream} />}
       {remoteStream && isVideoCall ? (
         renderVideo(remoteStream, styles.remoteVideo)
       ) : (
@@ -132,9 +157,11 @@ export const CallScreen = () => {
             </TouchableOpacity>
           )}
 
-          <TouchableOpacity onPress={toggleCamera} style={[styles.controlBtn, { backgroundColor: isCameraOff ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.1)' }]}>
-            {isCameraOff ? <CameraOff color="white" size={26} /> : <Camera color="white" size={26} />}
-          </TouchableOpacity>
+          {isVideoCall && (
+            <TouchableOpacity onPress={toggleCamera} style={[styles.controlBtn, { backgroundColor: isCameraOff ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.1)' }]}> 
+              {isCameraOff ? <CameraOff color="white" size={26} /> : <Camera color="white" size={26} />}
+            </TouchableOpacity>
+          )}
         </View>
       </BlurView>
     </View>

@@ -83,6 +83,21 @@ CREATE TABLE IF NOT EXISTS public.deleted_messages (
 
 CREATE INDEX IF NOT EXISTS idx_deleted_messages_message ON public.deleted_messages(message_id);
 
+-- Chat Settings: per-user, per-chat preferences
+CREATE TABLE IF NOT EXISTS public.chat_settings (
+  id             UUID        DEFAULT gen_random_uuid() PRIMARY KEY,
+  pair_id        UUID        REFERENCES public.pairs(id) ON DELETE CASCADE NOT NULL,
+  user_id        UUID        REFERENCES public.users(id) ON DELETE CASCADE NOT NULL,
+  background_id  TEXT        DEFAULT 'aurora' NOT NULL,
+  background_image_url TEXT,
+  background_opacity   NUMERIC(4, 2) DEFAULT 0.38 NOT NULL CHECK (background_opacity >= 0.12 AND background_opacity <= 0.85),
+  created_at     TIMESTAMPTZ DEFAULT NOW(),
+  updated_at     TIMESTAMPTZ DEFAULT NOW(),
+  CONSTRAINT chat_settings_unique_pair_user UNIQUE (pair_id, user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_chat_settings_pair_user ON public.chat_settings(pair_id, user_id);
+
 
 -- ============================================================================
 -- PART 2: FUNCTIONS & TRIGGERS
@@ -126,6 +141,7 @@ ALTER TABLE public.messages          ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.invites           ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.message_reactions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.deleted_messages  ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.chat_settings     ENABLE ROW LEVEL SECURITY;
 
 -- ── users ──────────────────────────────────────────────────────────────────
 DROP POLICY IF EXISTS "View relevant profiles" ON public.users;
@@ -230,6 +246,32 @@ DROP POLICY IF EXISTS "Delete own deleted_messages" ON public.deleted_messages;
 CREATE POLICY "Delete own deleted_messages" ON public.deleted_messages
   FOR DELETE USING (auth.uid() = user_id);
 
+-- ── chat_settings ──────────────────────────────────────────────────────────
+DROP POLICY IF EXISTS "View own chat settings" ON public.chat_settings;
+CREATE POLICY "View own chat settings" ON public.chat_settings
+  FOR SELECT USING (
+    auth.uid() = user_id
+    AND public.check_pair_access(pair_id)
+  );
+
+DROP POLICY IF EXISTS "Create own chat settings" ON public.chat_settings;
+CREATE POLICY "Create own chat settings" ON public.chat_settings
+  FOR INSERT WITH CHECK (
+    auth.uid() = user_id
+    AND public.check_pair_access(pair_id)
+  );
+
+DROP POLICY IF EXISTS "Update own chat settings" ON public.chat_settings;
+CREATE POLICY "Update own chat settings" ON public.chat_settings
+  FOR UPDATE USING (
+    auth.uid() = user_id
+    AND public.check_pair_access(pair_id)
+  )
+  WITH CHECK (
+    auth.uid() = user_id
+    AND public.check_pair_access(pair_id)
+  );
+
 
 -- ============================================================================
 -- PART 4: REALTIME
@@ -243,7 +285,8 @@ ALTER PUBLICATION supabase_realtime ADD TABLE
   public.invites,
   public.messages,
   public.message_reactions,
-  public.deleted_messages;
+  public.deleted_messages,
+  public.chat_settings;
 
 
 -- ============================================================================
@@ -366,3 +409,74 @@ CREATE POLICY "Update invites" ON public.invites
 DROP POLICY IF EXISTS "Create invites" ON public.invites;
 CREATE POLICY "Create invites" ON public.invites
   FOR INSERT WITH CHECK (auth.uid() = inviter_id);
+
+-- Fix 6: Chat Settings — per-user, per-chat background preferences
+CREATE TABLE IF NOT EXISTS public.chat_settings (
+  id             UUID        DEFAULT gen_random_uuid() PRIMARY KEY,
+  pair_id        UUID        REFERENCES public.pairs(id) ON DELETE CASCADE NOT NULL,
+  user_id        UUID        REFERENCES public.users(id) ON DELETE CASCADE NOT NULL,
+  background_id  TEXT        DEFAULT 'aurora' NOT NULL,
+  background_image_url TEXT,
+  background_opacity   NUMERIC(4, 2) DEFAULT 0.38 NOT NULL CHECK (background_opacity >= 0.12 AND background_opacity <= 0.85),
+  created_at     TIMESTAMPTZ DEFAULT NOW(),
+  updated_at     TIMESTAMPTZ DEFAULT NOW(),
+  CONSTRAINT chat_settings_unique_pair_user UNIQUE (pair_id, user_id)
+);
+
+ALTER TABLE public.chat_settings
+  ADD COLUMN IF NOT EXISTS background_image_url TEXT;
+
+ALTER TABLE public.chat_settings
+  ADD COLUMN IF NOT EXISTS background_opacity NUMERIC(4, 2) DEFAULT 0.38 NOT NULL;
+
+ALTER TABLE public.chat_settings
+  DROP CONSTRAINT IF EXISTS chat_settings_background_opacity_range;
+ALTER TABLE public.chat_settings
+  ADD CONSTRAINT chat_settings_background_opacity_range CHECK (background_opacity >= 0.12 AND background_opacity <= 0.85);
+
+CREATE INDEX IF NOT EXISTS idx_chat_settings_pair_user ON public.chat_settings(pair_id, user_id);
+
+ALTER TABLE public.chat_settings ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "View own chat settings" ON public.chat_settings;
+CREATE POLICY "View own chat settings" ON public.chat_settings
+  FOR SELECT USING (
+    auth.uid() = user_id
+    AND public.check_pair_access(pair_id)
+  );
+
+DROP POLICY IF EXISTS "Create own chat settings" ON public.chat_settings;
+CREATE POLICY "Create own chat settings" ON public.chat_settings
+  FOR INSERT WITH CHECK (
+    auth.uid() = user_id
+    AND public.check_pair_access(pair_id)
+  );
+
+DROP POLICY IF EXISTS "Update own chat settings" ON public.chat_settings;
+CREATE POLICY "Update own chat settings" ON public.chat_settings
+  FOR UPDATE USING (
+    auth.uid() = user_id
+    AND public.check_pair_access(pair_id)
+  )
+  WITH CHECK (
+    auth.uid() = user_id
+    AND public.check_pair_access(pair_id)
+  );
+
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime') THEN
+    IF NOT EXISTS (
+      SELECT 1
+      FROM pg_publication_tables
+      WHERE pubname = 'supabase_realtime'
+        AND schemaname = 'public'
+        AND tablename = 'chat_settings'
+    ) THEN
+      ALTER PUBLICATION supabase_realtime ADD TABLE public.chat_settings;
+    END IF;
+  END IF;
+END $$;
+
+-- Refresh PostgREST schema cache so the app can see chat_settings immediately.
+NOTIFY pgrst, 'reload schema';

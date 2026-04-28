@@ -1,5 +1,7 @@
 import { supabase } from './supabase';
 import { handleError } from '../utils/errorHandler';
+import { ChatBackgroundSettings, defaultChatBackgroundId, defaultChatBackgroundSettings, normalizeBackgroundOpacity } from '../utils/chatBackground';
+import { getUploadContentType, getUploadExtension, normalizeUploadBody } from '../utils/mediaUpload';
 
 // Authentication Services
 export const authService = {
@@ -265,11 +267,12 @@ export const messageService = {
     }
   },
 
-  async sendMessage(pairId: string, content: string, mediaUrl?: string, messageType: 'text' | 'image' | 'video' | 'audio' = 'text', replyToMessageId?: string) {
+  async sendMessage(pairId: string, content: string, mediaUrl?: string, messageType: 'text' | 'image' | 'video' | 'audio' | 'voice' = 'text', replyToMessageId?: string) {
     try {
       const user = await authService.getCurrentUser();
       if (!user) throw new Error('Auth required');
-      const payload: any = { pair_id: pairId, sender_id: user.id, content, media_url: mediaUrl, message_type: messageType };
+      const dbMessageType = messageType === 'audio' ? 'voice' : messageType;
+      const payload: any = { pair_id: pairId, sender_id: user.id, content, media_url: mediaUrl, message_type: dbMessageType };
       if (replyToMessageId) payload.reply_to_message_id = replyToMessageId;
       const { data, error } = await supabase.from('messages').insert(payload).select().single();
       if (error) throw error;
@@ -339,27 +342,13 @@ export const storageService = {
       const user = await authService.getCurrentUser();
       if (!user) throw new Error('Auth required');
 
-      let fileName: string;
-      const contentType: string | undefined = file.type || file.mimeType;
-
-      // Handle file URI objects (from camera/audio recording)
-      if (file.uri) {
-        const ext = file.name?.split('.').pop() ||
-                    file.uri.split('.').pop() ||
-                    'bin';
-        fileName = `${user.id}/${Date.now()}.${ext}`;
-        const { data, error } = await supabase.storage.from(bucket).upload(fileName, file as any, {
-          contentType: contentType || undefined,
-        });
-        if (error) throw error;
-        return supabase.storage.from(bucket).getPublicUrl(fileName).data.publicUrl;
-      }
-
-      // Handle Blob files (from ImagePicker)
-      const ext = file.name ? file.name.split('.').pop() : 'bin';
-      fileName = `${user.id}/${Date.now()}.${ext}`;
-      const { data, error } = await supabase.storage.from(bucket).upload(fileName, file, {
-        contentType: contentType || undefined,
+      const ext = getUploadExtension(file);
+      const fileName = `${user.id}/${Date.now()}.${ext}`;
+      const contentType = getUploadContentType(file);
+      const uploadBody = await normalizeUploadBody(file);
+      const { error } = await supabase.storage.from(bucket).upload(fileName, uploadBody as any, {
+        contentType,
+        upsert: false,
       });
       if (error) throw error;
       return supabase.storage.from(bucket).getPublicUrl(fileName).data.publicUrl;
@@ -443,6 +432,98 @@ export const deleteMessageService = {
 };
 
 export const chatSettingsService = {
+  async getChatContentCounts(pairId: string) {
+    try {
+      const { data, error } = await supabase
+        .from('messages')
+        .select('content, message_type')
+        .eq('pair_id', pairId);
+
+      if (error) throw error;
+
+      const messages = data || [];
+      const mediaCount = messages.filter((message: any) => message.message_type === 'image' || message.message_type === 'video').length;
+      const linkCount = messages.filter((message: any) => /\bhttps?:\/\/[^\s]+/i.test(message.content || '')).length;
+
+      return { mediaCount, linkCount, docsCount: 0 };
+    } catch (error) {
+      console.error('Get chat content counts error:', error);
+      return { mediaCount: 0, linkCount: 0, docsCount: 0 };
+    }
+  },
+
+  isMissingChatSettingsTable(error: any) {
+    return error?.code === 'PGRST205' || error?.message?.includes("public.chat_settings");
+  },
+
+  async getChatBackground(pairId: string) {
+    try {
+      const user = await authService.getCurrentUser();
+      if (!user) return defaultChatBackgroundSettings;
+
+      const { data, error } = await supabase
+        .from('chat_settings')
+        .select('background_id, background_image_url, background_opacity')
+        .eq('pair_id', pairId)
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (error) {
+        if (!this.isMissingChatSettingsTable(error)) {
+          console.warn('Get chat background error:', error.message);
+        }
+        return defaultChatBackgroundSettings;
+      }
+
+      return {
+        background_id: data?.background_id || defaultChatBackgroundId,
+        background_image_url: data?.background_image_url || null,
+        background_opacity: normalizeBackgroundOpacity(data?.background_opacity),
+      };
+    } catch (error) {
+      if (!this.isMissingChatSettingsTable(error)) {
+        console.warn('Get chat background failed:', error);
+      }
+      return defaultChatBackgroundSettings;
+    }
+  },
+
+  async updateChatBackground(pairId: string, updates: Partial<ChatBackgroundSettings>) {
+    try {
+      const user = await authService.getCurrentUser();
+      if (!user) throw new Error('Auth required');
+
+      const payload: any = {
+        pair_id: pairId,
+        user_id: user.id,
+        updated_at: new Date().toISOString(),
+      };
+
+      if (updates.background_id !== undefined) payload.background_id = updates.background_id;
+      if (updates.background_image_url !== undefined) payload.background_image_url = updates.background_image_url;
+      if (updates.background_opacity !== undefined) payload.background_opacity = normalizeBackgroundOpacity(updates.background_opacity);
+
+      const { error } = await supabase
+        .from('chat_settings')
+        .upsert(
+          payload,
+          { onConflict: 'pair_id,user_id' }
+        );
+
+      if (error) throw error;
+    } catch (error) {
+      if (this.isMissingChatSettingsTable(error)) {
+        throw new Error('Chat background settings table is not ready. Run PART 7 from supabase_setup.sql, then restart the app.');
+      }
+      console.error('Set chat background error:', error);
+      throw error;
+    }
+  },
+
+  async setChatBackground(pairId: string, backgroundId: string) {
+    return this.updateChatBackground(pairId, { background_id: backgroundId });
+  },
+
   async blockUser(pairId: string) {
     try {
       await supabase.from('pairs').update({ is_blocked: true }).eq('id', pairId);

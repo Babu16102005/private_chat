@@ -4,10 +4,10 @@ import { View, Text, TextInput, TouchableOpacity, FlatList, StyleSheet, Image, A
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
-import { ChevronLeft, Phone, Video, Mic, Plus, SendHorizontal, Search, X, Square, MoreVertical, Reply as ReplyIcon } from 'lucide-react-native';
-import { messageService, deleteMessageService, storageService, profileService, messageReactionsService } from '../services/supabaseService';
+import { ChevronLeft, Phone, Video, Mic, Camera, SendHorizontal, Search, X, Square, MoreVertical, Reply as ReplyIcon } from 'lucide-react-native';
+import { messageService, deleteMessageService, storageService, profileService, messageReactionsService, chatSettingsService } from '../services/supabaseService';
 import * as ImagePicker from 'expo-image-picker';
-import { useAudioRecorder, AudioModule, RecordingPresets } from 'expo-audio';
+import { useAudioRecorder, AudioModule, RecordingPresets, setAudioModeAsync } from 'expo-audio';
 
 import { supabase } from '../services/supabase';
 import { useAuth } from '../context/AuthContext';
@@ -16,6 +16,7 @@ import { ImageViewer } from '../components/ImageViewer';
 import { MediaViewer } from '../components/MediaViewer';
 import { useTheme } from '../context/ThemeContext';
 import { useCall } from '../context/CallContext';
+import { defaultChatBackgroundSettings, getChatBackgroundPreset } from '../utils/chatBackground';
 
 import { formatMessageTime, formatDateHeader, getDateKey } from '../utils/date';
 
@@ -58,7 +59,10 @@ export const ChatScreen = ({ route, navigation }: any) => {
   const [isSearching, setIsSearching] = useState(false);
   const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const [isRecording, setIsRecording] = useState(false);
+  const isRecordingRef = useRef(false);
+  const isRecordingTransitionRef = useRef(false);
   const [senderName, setSenderName] = useState('');
+  const [backgroundSettings, setBackgroundSettings] = useState(defaultChatBackgroundSettings);
 
   // Reply state
   const [replyingTo, setReplyingTo] = useState<ReplyToMessage | null>(null);
@@ -77,6 +81,7 @@ export const ChatScreen = ({ route, navigation }: any) => {
   const presenceChannelRef = useRef<any>(null);
   const footerRef = useRef<View>(null);
   const pulseAnim = useRef(new Animated.Value(1)).current;
+  const chatBackground = getChatBackgroundPreset(backgroundSettings.background_id);
 
   const fetchMessages = useCallback(async () => {
     if (!user?.id) return;
@@ -201,6 +206,21 @@ export const ChatScreen = ({ route, navigation }: any) => {
     }, [fetchMessages])
   );
 
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+
+      (async () => {
+        const nextBackgroundSettings = await chatSettingsService.getChatBackground(pairId);
+        if (active) setBackgroundSettings(nextBackgroundSettings);
+      })();
+
+      return () => {
+        active = false;
+      };
+    }, [pairId])
+  );
+
 
   const handleTyping = (text: string) => {
     setInput(text);
@@ -235,6 +255,18 @@ export const ChatScreen = ({ route, navigation }: any) => {
     }
   }, [pairId, replyingTo]);
 
+  const normalizeMessageType = (messageType?: string, mediaUrl?: string, content?: string): 'text' | 'image' | 'video' | 'audio' => {
+    if (messageType === 'image' || messageType === 'video' || messageType === 'audio' || messageType === 'voice') {
+      return messageType === 'voice' ? 'audio' : messageType;
+    }
+
+    if (mediaUrl && content === 'Voice message') {
+      return 'audio';
+    }
+
+    return 'text';
+  };
+
   const handleImageTap = (uri: string) => {
     setImageViewerUri(uri);
   };
@@ -250,6 +282,13 @@ export const ChatScreen = ({ route, navigation }: any) => {
 
   const handleCloseMediaViewer = () => {
     setMediaViewerUri(null);
+  };
+
+  const getAvatarSource = (profile: any, fallback = 'User') => {
+    if (profile?.avatar_url) return { uri: profile.avatar_url };
+
+    const seed = profile?.name || profile?.email || fallback;
+    return { uri: `https://api.dicebear.com/7.x/avataaars/svg?seed=${seed}` };
   };
 
   const handleAttach = async () => {
@@ -278,14 +317,23 @@ export const ChatScreen = ({ route, navigation }: any) => {
   };
 
   const startVoice = async () => {
+    if (isRecordingRef.current || isRecordingTransitionRef.current) return;
+
     try {
+      isRecordingTransitionRef.current = true;
       const permission = await AudioModule.requestRecordingPermissionsAsync();
       if (!permission.granted) {
         Alert.alert('Permission required', 'Please grant microphone permission to send voice messages.');
         return;
       }
 
-      await audioRecorder.record();
+      await setAudioModeAsync({
+        allowsRecording: true,
+        playsInSilentMode: true,
+      });
+      await audioRecorder.prepareToRecordAsync();
+      audioRecorder.record();
+      isRecordingRef.current = true;
       setIsRecording(true);
       Animated.loop(
         Animated.sequence([
@@ -295,30 +343,45 @@ export const ChatScreen = ({ route, navigation }: any) => {
       ).start();
     } catch (err) {
       console.error('Failed to start recording:', err);
+      isRecordingRef.current = false;
+      setIsRecording(false);
       Alert.alert('Error', 'Could not start recording. Microphone may be in use.');
+    } finally {
+      isRecordingTransitionRef.current = false;
     }
   };
 
   const stopVoice = async () => {
-    if (!isRecording) return;
+    if (!isRecordingRef.current || isRecordingTransitionRef.current) return;
     
     try {
+      isRecordingTransitionRef.current = true;
       pulseAnim.stopAnimation();
       Animated.timing(pulseAnim, { toValue: 1, duration: 150, useNativeDriver: true }).start();
 
       await audioRecorder.stop();
+      isRecordingRef.current = false;
       setIsRecording(false);
       const uri = audioRecorder.uri;
 
+      await setAudioModeAsync({
+        allowsRecording: false,
+        playsInSilentMode: true,
+      });
+
       if (uri) {
         const uploadFile = buildUploadFile(uri, 'voice.m4a', 'audio/mp4');
+        console.log('Uploading voice message:', { uri, name: uploadFile.name, type: uploadFile.type });
         const url = await storageService.uploadFile(uploadFile);
-        await sendMessage('', url, 'audio');
+        await sendMessage('Voice message', url, 'text');
       }
     } catch (error: any) {
       console.error('Voice upload failed:', error);
+      isRecordingRef.current = false;
       setIsRecording(false);
       Alert.alert('Error', 'Failed to send voice message.');
+    } finally {
+      isRecordingTransitionRef.current = false;
     }
   };
 
@@ -369,7 +432,7 @@ export const ChatScreen = ({ route, navigation }: any) => {
               id: msg.reply_to_message_id,
               content: msg.reply_content,
               senderName: msg.reply_sender_name || 'Unknown',
-              messageType: msg.reply_message_type,
+              messageType: normalizeMessageType(msg.reply_message_type, undefined, msg.reply_content),
             };
           }
 
@@ -378,7 +441,7 @@ export const ChatScreen = ({ route, navigation }: any) => {
               key={msg.id}
               content={msg.content}
               mediaUrl={msg.media_url}
-              messageType={msg.message_type}
+              messageType={normalizeMessageType(msg.message_type, msg.media_url, msg.content)}
               isMe={msg.sender_id === user!.id}
               timestamp={msg.created_at}
               delivered_at={msg.delivered_at}
@@ -404,7 +467,7 @@ export const ChatScreen = ({ route, navigation }: any) => {
     <MessageBubble
       content={item.content}
       mediaUrl={item.media_url}
-      messageType={item.message_type}
+      messageType={normalizeMessageType(item.message_type, item.media_url, item.content)}
       isMe={item.sender_id === user!.id}
       timestamp={item.created_at}
       delivered_at={item.delivered_at}
@@ -419,7 +482,7 @@ export const ChatScreen = ({ route, navigation }: any) => {
   const renderEmptyChat = () => (
     <View style={styles.emptyChat}>
       <View style={[styles.emptyAvatarWrap, { borderColor: colors.glassBorder }]}>
-        <Image source={{ uri: `https://api.dicebear.com/7.x/avataaars/svg?seed=${partner?.name || 'Partner'}` }} style={styles.emptyAvatar} />
+        <Image source={getAvatarSource(partner, 'Partner')} style={styles.emptyAvatar} />
       </View>
       <Text style={[styles.emptyTitle, { color: colors.text }]}>
         Say hello to {partner?.name || 'your partner'}
@@ -438,13 +501,20 @@ export const ChatScreen = ({ route, navigation }: any) => {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Subtle background gradient */}
       <View style={StyleSheet.absoluteFill}>
-        <LinearGradient colors={colors.gradientPrimary as any} style={StyleSheet.absoluteFill} />
-        {themeMode === 'mocha' && (
-          <>
-            <LinearGradient colors={['rgba(255, 107, 74, 0.08)', 'transparent'] as any} style={[styles.glowBall, { top: height * 0.1, left: -50, width: 200, height: 200 }]} />
-            <LinearGradient colors={['rgba(255, 107, 74, 0.05)', 'transparent'] as any} style={[styles.glowBall, { bottom: height * 0.1, right: -50, width: 200, height: 200 }]} />
-          </>
+        <LinearGradient colors={chatBackground.gradient as any} style={StyleSheet.absoluteFill} />
+        {backgroundSettings.background_image_url && (
+          <Image
+            source={{ uri: backgroundSettings.background_image_url }}
+            style={[StyleSheet.absoluteFill, { opacity: backgroundSettings.background_opacity }]}
+            resizeMode="cover"
+          />
         )}
+        {backgroundSettings.background_image_url && (
+          <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.28)' }]} />
+        )}
+        <LinearGradient colors={[chatBackground.glows[0], 'transparent'] as any} style={[styles.glowBall, { top: -80, right: -80, width: 280, height: 280 }]} />
+        <LinearGradient colors={[chatBackground.glows[1], 'transparent'] as any} style={[styles.glowBall, { top: height * 0.28, left: -90, width: 240, height: 240 }]} />
+        <LinearGradient colors={[chatBackground.glows[2], 'transparent'] as any} style={[styles.glowBall, { bottom: 40, right: -90, width: 260, height: 260 }]} />
       </View>
 
       {/* ImageViewer modal */}
@@ -469,7 +539,7 @@ export const ChatScreen = ({ route, navigation }: any) => {
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         {/* Header */}
         <BlurView
-          intensity={themeMode === 'obsidian' ? 10 : colors.glassBlur}
+          intensity={colors.glassBlur}
           tint={isDark ? 'dark' : 'light'}
           style={[styles.headerBlur, { borderBottomColor: colors.glassBorder, borderBottomWidth: colors.borderWidth > 0 ? colors.borderWidth : 0.5 }]}
         >
@@ -481,7 +551,7 @@ export const ChatScreen = ({ route, navigation }: any) => {
 
               <TouchableOpacity activeOpacity={0.7} onPress={() => Alert.alert('Profile', partner?.name || 'Partner')} style={styles.partnerInfo}>
                 <View style={styles.avatarWrap}>
-                  <Image source={{ uri: `https://api.dicebear.com/7.x/avataaars/svg?seed=${partner?.name || 'Partner'}` }} style={[styles.headerAvatar, { borderRadius: colors.radius.story }]} />
+                  <Image source={getAvatarSource(partner, 'Partner')} style={[styles.headerAvatar, { borderRadius: colors.radius.story }]} />
                   {isOnline && (
                     <View style={[styles.onlineDot, { backgroundColor: colors.tertiary, borderColor: colors.background }]} />
                   )}
@@ -499,20 +569,20 @@ export const ChatScreen = ({ route, navigation }: any) => {
               </TouchableOpacity>
 
               <View style={styles.headerActions}>
-                <TouchableOpacity onPress={() => initiateCall(pairId, partner, false)} style={styles.actionIcon}><Phone size={22} color={colors.text} /></TouchableOpacity>
-                <TouchableOpacity onPress={() => initiateCall(pairId, partner, true)} style={styles.actionIcon}><Video size={22} color={colors.text} /></TouchableOpacity>
-                <TouchableOpacity onPress={() => setIsSearching(!isSearching)} style={styles.actionIcon}>
+                <TouchableOpacity onPress={() => initiateCall(pairId, partner, false)} style={[styles.actionIcon, { borderColor: colors.glassBorder }]}><Phone size={22} color={colors.text} /></TouchableOpacity>
+                <TouchableOpacity onPress={() => initiateCall(pairId, partner, true)} style={[styles.actionIcon, { borderColor: colors.glassBorder }]}><Video size={22} color={colors.text} /></TouchableOpacity>
+                <TouchableOpacity onPress={() => setIsSearching(!isSearching)} style={[styles.actionIcon, { borderColor: colors.glassBorder }]}> 
                   {isSearching ? <X size={22} color={colors.text} /> : <Search size={22} color={colors.text} />}
                 </TouchableOpacity>
-                <TouchableOpacity onPress={openChatSettings} style={styles.actionIcon}><MoreVertical size={20} color={colors.text} /></TouchableOpacity>
+                <TouchableOpacity onPress={openChatSettings} style={[styles.actionIcon, { borderColor: colors.glassBorder }]}><MoreVertical size={20} color={colors.text} /></TouchableOpacity>
               </View>
             </View>
             {isSearching && (
               <View style={styles.searchBarRow}>
                 <BlurView
-                  intensity={themeMode === 'obsidian' ? 10 : colors.glassBlur}
+                  intensity={colors.glassBlur}
                   tint={isDark ? 'dark' : 'light'}
-                  style={[styles.searchInputBar, { backgroundColor: 'rgba(255,255,255,0.06)', borderColor: colors.glassBorder, borderRadius: 12 }]}
+                  style={[styles.searchInputBar, { backgroundColor: 'rgba(255,255,255,0.12)', borderColor: colors.glassBorder, borderRadius: 18 }]}
                 >
                   <Search size={18} color={colors.gray} style={{ marginRight: 8 }} />
                   <TextInput
@@ -583,7 +653,7 @@ export const ChatScreen = ({ route, navigation }: any) => {
             <View style={styles.replyContent}>
               <Text style={[styles.replyName, { color: colors.primary }]} numberOfLines={1}>{replyingTo.senderName}</Text>
               <Text style={[styles.replyText, { color: colors.gray }]} numberOfLines={1}>
-                {replyingTo.messageType === 'image' ? '📷 Photo' : replyingTo.messageType === 'audio' ? '🎤 Voice message' : replyingTo.content}
+                {replyingTo.messageType === 'image' ? '📷 Photo' : normalizeMessageType(replyingTo.messageType, replyingTo.mediaUrl, replyingTo.content) === 'audio' ? '🎤 Voice message' : replyingTo.content}
               </Text>
             </View>
             <TouchableOpacity onPress={cancelReply} style={styles.replyCancelBtn}>
@@ -602,34 +672,44 @@ export const ChatScreen = ({ route, navigation }: any) => {
           )}
 
           <BlurView
-            intensity={themeMode === 'obsidian' ? 10 : colors.glassBlur}
+            intensity={colors.glassBlur + 10}
             tint={isDark ? 'dark' : 'light'}
             style={[styles.inputBar, {
-              backgroundColor: themeMode === 'obsidian' ? colors.bubbleSentBg : 'rgba(255,255,255,0.05)',
+              backgroundColor: 'rgba(255,255,255,0.12)',
               borderColor: colors.glassBorder,
-              borderWidth: colors.borderWidth,
+              borderWidth: StyleSheet.hairlineWidth,
             }]}
           >
-            <TouchableOpacity onPress={handleAttach} style={styles.pillAction}>
-              <Plus size={22} color={colors.primary} strokeWidth={2} />
+            <LinearGradient
+              colors={['rgba(255,255,255,0.16)', 'rgba(255,255,255,0.04)', 'rgba(185,76,255,0.12)'] as any}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={StyleSheet.absoluteFill}
+            />
+            <TouchableOpacity onPress={handleAttach} style={[styles.pillAction, styles.inputIconButton, { borderColor: colors.glassBorder }]}> 
+              <Camera size={21} color={colors.primary} strokeWidth={2} />
             </TouchableOpacity>
 
-            <TextInput
-              style={[styles.inputField, { color: colors.text }]}
-              placeholder="Type a message..."
-              placeholderTextColor={colors.gray}
-              value={input}
-              onChangeText={handleTyping}
-              multiline
-              maxLength={2000}
-            />
+            <View style={styles.inputTextWrap}>
+              <TextInput
+                style={[styles.inputField, { color: colors.text }]}
+                placeholder="Message"
+                placeholderTextColor="rgba(255,255,255,0.48)"
+                value={input}
+                onChangeText={handleTyping}
+                multiline
+                maxLength={2000}
+              />
+            </View>
 
             {input.trim() ? (
-              <TouchableOpacity style={[styles.sendBtn, { backgroundColor: colors.primary }]} onPress={() => sendMessage(input)}>
-                <SendHorizontal size={18} color="white" strokeWidth={2.5} />
+              <TouchableOpacity style={styles.sendBtn} onPress={() => sendMessage(input)}>
+                <LinearGradient colors={colors.gradientSecondary as any} style={styles.sendBtnGradient}>
+                  <SendHorizontal size={18} color="white" strokeWidth={2.5} />
+                </LinearGradient>
               </TouchableOpacity>
             ) : (
-              <TouchableOpacity onPress={isRecording ? stopVoice : startVoice} style={styles.pillAction}>
+              <TouchableOpacity onPress={isRecording ? stopVoice : startVoice} style={[styles.pillAction, styles.inputIconButton, { borderColor: colors.glassBorder }]}> 
                 {isRecording ? <Square size={20} color="#FF3B30" fill="#FF3B30" /> : <Mic size={22} color={colors.primary} strokeWidth={1.5} />}
               </TouchableOpacity>
             )}
@@ -642,27 +722,27 @@ export const ChatScreen = ({ route, navigation }: any) => {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  glowBall: { position: 'absolute', borderRadius: 100, overflow: 'hidden' },
+  glowBall: { position: 'absolute', borderRadius: 160, overflow: 'hidden' },
 
   // Header
-  headerBlur: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10 },
+  headerBlur: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10, backgroundColor: 'rgba(255,255,255,0.12)' },
   headerSafe: { paddingTop: 10 },
   headerContent: { flexDirection: 'row', alignItems: 'center', height: 64, paddingHorizontal: 12, justifyContent: 'space-between' },
   navBtn: { width: 40, height: 40, justifyContent: 'center', alignItems: 'center' },
   partnerInfo: { flexDirection: 'row', alignItems: 'center', flex: 1, marginLeft: 2 },
   avatarWrap: { position: 'relative', marginRight: 12 },
-  headerAvatar: { width: 38, height: 38 },
+  headerAvatar: { width: 38, height: 38, borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255,255,255,0.32)' },
   onlineDot: { position: 'absolute', bottom: 0, right: 0, width: 12, height: 12, borderRadius: 6, borderWidth: 2 },
   partnerTextWrap: { justifyContent: 'center' },
   headerName: { fontSize: 16, fontWeight: '700' },
   statusTxt: { fontSize: 12, fontWeight: '500' },
   offlineStatus: { opacity: 0.5 },
   headerActions: { flexDirection: 'row', gap: 2 },
-  actionIcon: { width: 40, height: 40, justifyContent: 'center', alignItems: 'center' },
+  actionIcon: { width: 40, height: 40, borderRadius: 18, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.12)', borderWidth: StyleSheet.hairlineWidth },
 
   // Search bar
   searchBarRow: { paddingHorizontal: 12, paddingBottom: 10 },
-  searchInputBar: { height: 40, borderRadius: 12, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, overflow: 'hidden' },
+  searchInputBar: { height: 42, borderRadius: 16, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth },
   searchField: { flex: 1, fontSize: 14 },
 
   // List
@@ -670,11 +750,11 @@ const styles = StyleSheet.create({
 
   // Date separator (WhatsApp-style pill)
   dateSeparator: { alignItems: 'center', marginVertical: 12, marginHorizontal: 8 },
-  datePill: { paddingHorizontal: 14, paddingVertical: 5, borderRadius: 10 },
+  datePill: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 14, borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255,255,255,0.18)', backgroundColor: 'rgba(255,255,255,0.1)' },
   dateText: { fontSize: 12, fontWeight: '600' },
 
   // Reply preview bar
-  replyPreviewBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, marginHorizontal: 8, borderRadius: 12, marginBottom: 4 },
+  replyPreviewBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, marginHorizontal: 8, borderRadius: 18, marginBottom: 4, borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255,255,255,0.12)' },
   replyAccentBar: { width: 4, height: '100%', borderRadius: 2, position: 'absolute', left: 0, top: 0 },
   replyContent: { flex: 1, gap: 2 },
   replyName: { fontSize: 12, fontWeight: '600' },
@@ -682,14 +762,18 @@ const styles = StyleSheet.create({
   replyCancelBtn: { padding: 6 },
 
   // Input bar
-  pillWrapper: { paddingHorizontal: 8, paddingTop: 8 },
+  pillWrapper: { paddingHorizontal: 12, paddingTop: 10 },
   recordingIndicator: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 6 },
   recordingDot: { width: 8, height: 8, borderRadius: 4, marginRight: 8 },
   recordingText: { color: '#FF3B30', fontSize: 13, fontWeight: '600' },
-  inputBar: { borderRadius: 24, flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: 8, paddingVertical: 6, overflow: 'hidden' },
-  pillAction: { width: 36, height: 40, justifyContent: 'center', alignItems: 'center' },
-  inputField: { flex: 1, paddingHorizontal: 8, fontSize: 15, fontWeight: '400', maxHeight: 100, minHeight: 36, textAlignVertical: 'center' },
-  sendBtn: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center', margin: 2 },
+  inputBar: { minHeight: 54, borderRadius: 28, flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: 8, paddingVertical: 7, overflow: 'hidden', shadowColor: '#B94CFF', shadowOffset: { width: 0, height: 14 }, shadowOpacity: 0.28, shadowRadius: 28, elevation: 8 },
+  inputShine: { position: 'absolute', top: 1, left: 18, right: 18, height: 1, backgroundColor: 'rgba(255,255,255,0.42)' },
+  pillAction: { width: 40, height: 40, justifyContent: 'center', alignItems: 'center' },
+  inputIconButton: { borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.08)', borderWidth: StyleSheet.hairlineWidth },
+  inputTextWrap: { flex: 1, minHeight: 40, justifyContent: 'center', paddingHorizontal: 8 },
+  inputField: { flex: 1, paddingHorizontal: 8, paddingTop: 9, paddingBottom: 8, fontSize: 15, fontWeight: '500', maxHeight: 104, minHeight: 40, textAlignVertical: 'center', letterSpacing: 0.1 },
+  sendBtn: { width: 40, height: 40, borderRadius: 20, marginLeft: 2, shadowColor: '#D946EF', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.4, shadowRadius: 12, elevation: 6 },
+  sendBtnGradient: { flex: 1, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
 
   // Empty chat
   emptyChat: { alignItems: 'center', justifyContent: 'center', paddingVertical: 80, paddingHorizontal: 40 },

@@ -2,8 +2,9 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, TextInput, SafeAreaView, Dimensions, ActivityIndicator, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Moon, Search, Plus, MessageCircle, Droplets, X, Check, CheckCheck } from 'lucide-react-native';
+import { Moon, Search, Plus, MessageCircle, Droplets, X, Check, CheckCheck, Settings } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
 import { useAuth } from '../context/AuthContext';
 import { inviteService, messageService } from '../services/supabaseService';
 import { supabase } from '../services/supabase';
@@ -152,6 +153,9 @@ export const HomeScreen = ({ navigation }: any) => {
     const isOnline = onlineStatus[item.id];
     const isTyping = typingStatus[item.id];
     const avatarSeed = partner?.name || partner?.email || 'User';
+    const avatarSource = partner?.avatar_url
+      ? { uri: partner.avatar_url }
+      : { uri: `https://api.dicebear.com/7.x/avataaars/svg?seed=${avatarSeed}` };
     const lastMsg = item.last_message;
     const lastMsgTime = lastMsg?.created_at;
     const isLastMsgFromMe = lastMsg?.sender_id === user?.id;
@@ -164,7 +168,7 @@ export const HomeScreen = ({ navigation }: any) => {
       >
         <View style={styles.chatThumbWrap}>
           <Image
-            source={{ uri: `https://api.dicebear.com/7.x/avataaars/svg?seed=${avatarSeed}` }}
+            source={avatarSource}
             style={[styles.chatThumb, { borderRadius: colors.radius.story }]}
           />
           {isOnline && (
@@ -238,12 +242,9 @@ export const HomeScreen = ({ navigation }: any) => {
       {/* Background gradient */}
       <View style={StyleSheet.absoluteFill}>
         <LinearGradient colors={colors.gradientPrimary as any} style={StyleSheet.absoluteFill} />
-        {themeMode === 'mocha' && (
-          <>
-            <LinearGradient colors={['rgba(255, 107, 74, 0.12)', 'transparent'] as any} style={[styles.glowBall, { top: -100, right: -50, width: 350, height: 350 }]} />
-            <LinearGradient colors={['rgba(255, 107, 74, 0.05)', 'transparent'] as any} style={[styles.glowBall, { bottom: height * 0.2, left: -100, width: 300, height: 300 }]} />
-          </>
-        )}
+        <LinearGradient colors={['rgba(185, 76, 255, 0.52)', 'transparent'] as any} style={[styles.glowBall, { top: -120, right: -80, width: 380, height: 380 }]} />
+        <LinearGradient colors={['rgba(37, 214, 255, 0.32)', 'transparent'] as any} style={[styles.glowBall, { top: height * 0.26, left: -140, width: 320, height: 320 }]} />
+        <LinearGradient colors={['rgba(255, 122, 92, 0.24)', 'transparent'] as any} style={[styles.glowBall, { bottom: -80, right: -80, width: 280, height: 280 }]} />
       </View>
 
       <SafeAreaView style={styles.safe}>
@@ -254,15 +255,15 @@ export const HomeScreen = ({ navigation }: any) => {
             <TouchableOpacity onPress={toggleTheme} style={styles.headerAction}>
               {themeMode === 'obsidian' ? <Droplets size={24} color={colors.primary} /> : <Moon size={24} color={colors.primary} />}
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => navigation.navigate('Profile')} style={[styles.headerAvatarMini, { borderColor: colors.glassBorder, borderWidth: colors.borderWidth }]}>
-              <Image source={{ uri: `https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.email || 'User'}` }} style={{ width: '100%', height: '100%' }} />
+            <TouchableOpacity onPress={() => navigation.navigate('Profile')} style={[styles.settingsButton, { borderColor: colors.glassBorder, borderWidth: colors.borderWidth }]}> 
+              <Settings size={22} color={colors.text} />
             </TouchableOpacity>
           </View>
         </View>
 
         {/* Search bar */}
         <View style={styles.searchWrapper}>
-          <View style={[styles.searchBar, { backgroundColor: 'rgba(255,255,255,0.06)', borderColor: colors.glassBorder, borderRadius: 16 }]}>
+          <BlurView intensity={colors.glassBlur + 8} tint={isDark ? 'dark' : 'light'} style={[styles.searchBar, { backgroundColor: 'rgba(255,255,255,0.12)', borderColor: colors.glassBorder, borderRadius: 22 }]}> 
             <Search size={18} color={colors.gray} style={{ marginRight: 8 }} />
             <TextInput
               style={[styles.searchInput, { color: colors.text }]}
@@ -276,7 +277,7 @@ export const HomeScreen = ({ navigation }: any) => {
                 <X size={16} color={colors.gray} />
               </TouchableOpacity>
             )}
-          </View>
+          </BlurView>
         </View>
 
         {/* Chat list */}
@@ -318,18 +319,18 @@ export const HomeScreen = ({ navigation }: any) => {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   safe: { flex: 1 },
-  glowBall: { position: 'absolute', borderRadius: 200, overflow: 'hidden' },
+  glowBall: { position: 'absolute', borderRadius: 220, overflow: 'hidden' },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 25, paddingTop: 20, paddingBottom: 20 },
   headerTitle: { fontSize: 32, fontWeight: '800' },
   headerRight: { flexDirection: 'row', gap: 15, alignItems: 'center' },
   headerAction: { opacity: 0.8 },
-  headerAvatarMini: { width: 40, height: 40, borderRadius: 12, overflow: 'hidden' },
+  settingsButton: { width: 40, height: 40, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.14)', shadowColor: '#B94CFF', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.28, shadowRadius: 20, elevation: 6 },
   searchWrapper: { paddingHorizontal: 20, marginBottom: 20 },
-  searchBar: { height: 46, borderRadius: 16, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, overflow: 'hidden' },
+  searchBar: { height: 50, borderRadius: 20, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth },
   searchInput: { flex: 1, fontSize: 15 },
   listContainer: { flex: 1 },
   listInside: { paddingBottom: 100 },
-  chatRow: { flexDirection: 'row', padding: 16, alignItems: 'center', paddingHorizontal: 20 },
+  chatRow: { flexDirection: 'row', padding: 16, alignItems: 'center', paddingHorizontal: 20, marginHorizontal: 12, marginBottom: 10, borderRadius: 26, backgroundColor: 'rgba(255,255,255,0.09)', shadowColor: '#B94CFF', shadowOffset: { width: 0, height: 14 }, shadowOpacity: 0.2, shadowRadius: 26, elevation: 5 },
   chatThumbWrap: { position: 'relative' },
   chatThumb: { width: 56, height: 56 },
   onlineIndicator: { position: 'absolute', bottom: 0, right: 0, width: 14, height: 14, borderRadius: 7, borderWidth: 2 },
@@ -347,6 +348,6 @@ const styles = StyleSheet.create({
   emptyWrap: { height: 250, justifyContent: 'center', alignItems: 'center', gap: 10 },
   emptyLabel: { fontSize: 16, fontWeight: '600' },
   emptySublabel: { fontSize: 14, textAlign: 'center', paddingHorizontal: 40 },
-  floatPlus: { position: 'absolute', right: 20, width: 60, height: 60, borderRadius: 30, shadowColor: '#7D5CFF', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.4, shadowRadius: 10, elevation: 8 },
+  floatPlus: { position: 'absolute', right: 20, width: 60, height: 60, borderRadius: 30, shadowColor: '#B94CFF', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.5, shadowRadius: 18, elevation: 8 },
   floatGrad: { flex: 1, borderRadius: 30, justifyContent: 'center', alignItems: 'center' },
 });

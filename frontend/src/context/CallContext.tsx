@@ -1,8 +1,10 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
-import { Platform, Alert } from 'react-native';
+import { Platform, Alert, PermissionsAndroid } from 'react-native';
 import Constants from 'expo-constants';
 import { supabase } from '../services/supabase';
 import { useAuth } from './AuthContext';
+import { configureCallAudioMode, restoreDefaultAudioMode, startCallTone, stopCallTone } from '../utils/callAudio';
+import { buildCallSignalPayload, getCallSignalType, getCallTargetId } from '../utils/callSignaling';
 
 let RTCPeerConnectionImpl: any;
 let RTCIceCandidateImpl: any;
@@ -55,12 +57,89 @@ interface CallContextType {
 
 const CallContext = createContext<CallContextType | undefined>(undefined);
 
-const configuration = {
-  iceServers: [
-    { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' },
-    { urls: 'stun:stun2.l.google.com:19302' },
-  ],
+const fallbackIceServers = [
+  { urls: 'stun:stun.l.google.com:19302' },
+  { urls: 'stun:stun1.l.google.com:19302' },
+  { urls: 'stun:stun2.l.google.com:19302' },
+];
+
+const buildStaticIceServers = () => {
+  const iceServers: any[] = [
+    ...fallbackIceServers,
+  ];
+  const turnUrl = process.env.EXPO_PUBLIC_TURN_URL;
+  const turnUsername = process.env.EXPO_PUBLIC_TURN_USERNAME;
+  const turnCredential = process.env.EXPO_PUBLIC_TURN_CREDENTIAL;
+
+  if (turnUrl && turnUsername && turnCredential) {
+    iceServers.push({
+      urls: turnUrl.split(',').map((url: string) => url.trim()).filter(Boolean),
+      username: turnUsername,
+      credential: turnCredential,
+    });
+  }
+
+  return iceServers;
+};
+
+const fetchMeteredIceServers = async () => {
+  const meteredUrl = process.env.EXPO_PUBLIC_METERED_TURN_URL;
+  const meteredApiKey = process.env.EXPO_PUBLIC_METERED_TURN_API_KEY;
+
+  if (!meteredUrl || !meteredApiKey) return null;
+
+  const url = `${meteredUrl.replace(/\/$/, '')}/api/v1/turn/credentials?apiKey=${encodeURIComponent(meteredApiKey)}`;
+  const response = await fetch(url);
+
+  if (!response.ok) {
+    throw new Error(`Metered TURN credentials failed with status ${response.status}`);
+  }
+
+  const iceServers = await response.json();
+  return Array.isArray(iceServers) && iceServers.length > 0 ? iceServers : null;
+};
+
+const getIceServers = async () => {
+  try {
+    const meteredIceServers = await fetchMeteredIceServers();
+    if (meteredIceServers) {
+      return meteredIceServers;
+    }
+  } catch (error) {
+    console.warn('Failed to fetch Metered TURN credentials, using static ICE config:', error);
+  }
+
+  return buildStaticIceServers();
+};
+
+const buildPeerConnectionConfiguration = async () => ({
+  iceServers: await getIceServers(),
+  iceCandidatePoolSize: 10,
+  iceTransportPolicy: process.env.EXPO_PUBLIC_FORCE_TURN === 'true' ? 'relay' : 'all',
+});
+
+const ICE_RESTART_LIMIT = 1;
+
+const callLog = (message: string, details?: Record<string, any>) => {
+  if (__DEV__) {
+    console.log(`[Call] ${message}`, details || '');
+  }
+};
+
+const ensureAndroidMediaPermissions = async (wantsVideo: boolean) => {
+  if (Platform.OS !== 'android') return;
+
+  const permissions = [
+    PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
+    ...(wantsVideo ? [PermissionsAndroid.PERMISSIONS.CAMERA] : []),
+  ];
+
+  const statuses = await PermissionsAndroid.requestMultiple(permissions);
+  const denied = permissions.filter((permission) => statuses[permission] !== PermissionsAndroid.RESULTS.GRANTED);
+
+  if (denied.length > 0) {
+    throw Object.assign(new Error('Camera or microphone permission was denied'), { name: 'PermissionDeniedError' });
+  }
 };
 
 export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -75,12 +154,14 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isCameraOff, setIsCameraOff] = useState(false);
   const [isVideoCall, setIsVideoCall] = useState(false);
   const [remoteSdp, setRemoteSdp] = useState<any>(null);
+  const [partnerTargetId, setPartnerTargetId] = useState<string | null>(null);
 
   const pc = useRef<any>(null);
   const inboundChannel = useRef<any>(null);
   const outboundChannel = useRef<any>(null);
   const callStateRef = useRef<CallState>('IDLE');
   const pendingIceCandidates = useRef<any[]>([]);
+  const iceRestartCount = useRef(0);
 
   useEffect(() => {
     callStateRef.current = callState;
@@ -106,15 +187,19 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     removeChannel(outboundChannel);
+    stopCallTone();
+    restoreDefaultAudioMode().catch((error) => console.warn('Failed to restore audio mode:', error));
 
     // Clear pending ICE candidates queue
     pendingIceCandidates.current = [];
+    iceRestartCount.current = 0;
 
     setRemoteSdp(null);
     setRemoteStream(null);
     setCallState('IDLE');
     setIsIncoming(false);
     setPartnerInfo(null);
+    setPartnerTargetId(null);
     setActivePairId(null);
     setIsMuted(false);
     setIsCameraOff(false);
@@ -143,6 +228,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const channel = supabase.channel(`calls:${targetUserId}`);
     outboundChannel.current = channel;
+    callLog('subscribing outbound channel', { targetUserId });
     
     return new Promise<any>((resolve, reject) => {
       const timeout = setTimeout(() => {
@@ -152,6 +238,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       channel.subscribe((status: string) => {
         if (status === 'SUBSCRIBED') {
           clearTimeout(timeout);
+          callLog('outbound channel ready', { targetUserId });
           resolve(channel);
         } else if (status === 'CHANNEL_ERROR') {
           clearTimeout(timeout);
@@ -161,16 +248,22 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
   }, [removeChannel]);
 
-  const sendSignal = useCallback(async (event: string, payload: Record<string, any>) => {
+  const sendSignal = useCallback(async (event: string, payload: Record<string, any> = {}) => {
     if (!outboundChannel.current) {
       throw new Error('Call signaling channel is not ready');
     }
 
-    await outboundChannel.current.send({
+    const result: any = await outboundChannel.current.send({
       type: 'broadcast',
       event,
-      payload,
+      payload: buildCallSignalPayload(event as any, payload),
     });
+
+    callLog('signal sent', { event, result });
+
+    if (result === 'error' || result?.error) {
+      throw new Error('Call signaling message failed to send');
+    }
   }, []);
 
   const cleanup = useCallback(() => {
@@ -181,10 +274,10 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!user) return;
 
     const globalChannel = supabase.channel(`calls:${user.id}`)
-      .on('broadcast', { event: '*' }, async ({ payload }: any) => {
+      .on('broadcast', { event: '*' }, async ({ event, payload }: any) => {
         if (!payload) return;
 
-        const eventType = payload.type || '';
+        const eventType = getCallSignalType(event, payload);
 
         switch (eventType) {
           case 'call-offer':
@@ -192,21 +285,23 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
             if (callStateRef.current !== 'IDLE') return;
 
             setPartnerInfo(payload.senderInfo);
+            setPartnerTargetId(payload.senderInfo?.id || null);
             setActivePairId(payload.pairId);
             setRemoteSdp(payload.sdp);
             setIsIncoming(true);
             setIsVideoCall(!!payload.isVideo);
             setIsCameraOff(!payload.isVideo);
             setCallState('RINGING');
+            configureCallAudioMode(!!payload.isVideo).catch((error) => console.warn('Failed to configure call audio:', error));
+            startCallTone('ringtone');
             break;
 
           case 'ice-candidate':
-            if (!pc.current || !payload.candidate) return;
+            if (!payload.candidate) return;
             try {
-              if (pc.current.remoteDescription) {
+              if (pc.current?.remoteDescription) {
                 await pc.current.addIceCandidate(new RTCIceCandidateImpl(payload.candidate));
               } else {
-                // Queue ICE candidate if remote description not set yet
                 pendingIceCandidates.current.push(payload.candidate);
               }
             } catch (error) {
@@ -230,6 +325,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
               }
               
               setCallState('CONNECTED');
+              stopCallTone();
             } catch (error) {
               console.error('Failed to set remote answer:', error);
             }
@@ -269,7 +365,14 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     await ensureOutboundChannel(partnerId);
 
-    pc.current = new RTCPeerConnectionImpl(configuration);
+    const peerConfiguration = await buildPeerConnectionConfiguration();
+    pc.current = new RTCPeerConnectionImpl(peerConfiguration);
+    callLog('ice server configuration', {
+      iceServerCount: peerConfiguration.iceServers.length,
+      hasTurn: peerConfiguration.iceServers.some((server: any) => String(server.urls).includes('turn:')),
+      iceTransportPolicy: peerConfiguration.iceTransportPolicy,
+    });
+    callLog('peer connection created', { partnerId, wantsVideo });
 
     pc.current.onicecandidate = async (event: any) => {
       if (!event.candidate) return;
@@ -283,6 +386,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     pc.current.ontrack = (event: any) => {
       if (event.streams && event.streams[0]) {
+        callLog('remote stream received', { trackKind: event.track?.kind });
         setRemoteStream(event.streams[0]);
         return;
       }
@@ -296,8 +400,40 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     };
 
+    pc.current.onconnectionstatechange = () => {
+      const state = pc.current?.connectionState;
+      callLog('peer connection state changed', { state });
+      if (state === 'connected') {
+        stopCallTone();
+        setCallState('CONNECTED');
+      }
+      if (state === 'failed') {
+        if (callStateRef.current !== 'IDLE') {
+          cleanup();
+        }
+      }
+    };
+
+    pc.current.oniceconnectionstatechange = () => {
+      const state = pc.current?.iceConnectionState;
+      callLog('ice connection state changed', { state });
+      if (state === 'failed') {
+        if (iceRestartCount.current < ICE_RESTART_LIMIT && pc.current?.restartIce) {
+          iceRestartCount.current += 1;
+          callLog('restarting ICE', { attempt: iceRestartCount.current });
+          pc.current.restartIce();
+          return;
+        }
+
+        if (callStateRef.current !== 'IDLE') {
+          cleanup();
+        }
+      }
+    };
+
     let stream;
     try {
+      await ensureAndroidMediaPermissions(wantsVideo);
       stream = await mediaDevicesImpl.getUserMedia({
         audio: true,
         video: wantsVideo,
@@ -331,20 +467,28 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     setIsCameraOff(!wantsVideo);
     stream.getTracks().forEach((track: any) => pc.current?.addTrack(track, stream));
-  }, [ensureOutboundChannel, sendSignal]);
+  }, [cleanup, ensureOutboundChannel, sendSignal]);
 
   const initiateCall = async (pairId: string, partner: any, isVideo: boolean) => {
     try {
       if (!user) return;
+      const targetUserId = getCallTargetId(partner);
+
+      if (!targetUserId || targetUserId === user.id) {
+        throw new Error('Could not find your partner account for the call. Please reopen the chat and try again.');
+      }
 
       setPartnerInfo(partner);
+      setPartnerTargetId(targetUserId);
       setActivePairId(pairId);
       setCallState('RINGING');
       setIsIncoming(false);
       setIsVideoCall(isVideo);
       setRemoteSdp(null);
+      await configureCallAudioMode(isVideo);
 
-      await setupPeerConnection(partner.id, isVideo);
+      callLog('starting call', { pairId, targetUserId, isVideo });
+      await setupPeerConnection(targetUserId, isVideo);
 
       const offer = await pc.current.createOffer();
       await pc.current.setLocalDescription(offer);
@@ -359,6 +503,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         pairId,
         isVideo,
       });
+      startCallTone('ringback');
     } catch (error: any) {
       console.error('Call start failed:', error);
       const msg = error?.message || 'Could not start the call.';
@@ -376,9 +521,13 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const acceptCall = async () => {
     try {
-      if (!partnerInfo || !activePairId || !remoteSdp) return;
+      const targetUserId = partnerTargetId || getCallTargetId(partnerInfo);
+      if (!partnerInfo || !activePairId || !remoteSdp || !targetUserId) return;
 
-      await setupPeerConnection(partnerInfo.id, !isCameraOff);
+      callLog('accepting call', { activePairId, targetUserId });
+      stopCallTone();
+      await configureCallAudioMode(isVideoCall);
+      await setupPeerConnection(targetUserId, isVideoCall);
 
       await pc.current.setRemoteDescription(new RTCSessionDescriptionImpl(remoteSdp));
       
@@ -396,6 +545,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await pc.current.setLocalDescription(answer);
 
       await sendSignal('call-answer', { sdp: answer });
+      stopCallTone();
       setCallState('CONNECTED');
     } catch (error: any) {
       console.error('Call accept failed:', error);
@@ -405,9 +555,10 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const rejectCall = async () => {
-    if (partnerInfo) {
+    const targetUserId = partnerTargetId || getCallTargetId(partnerInfo);
+    if (targetUserId) {
       try {
-        await ensureOutboundChannel(partnerInfo.id);
+        await ensureOutboundChannel(targetUserId);
         await sendSignal('call-hangup', { reason: 'rejected' });
       } catch (error) {
         console.error('Failed to reject call:', error);
@@ -417,9 +568,10 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const endCall = async () => {
-    if (partnerInfo) {
+    const targetUserId = partnerTargetId || getCallTargetId(partnerInfo);
+    if (targetUserId) {
       try {
-        await ensureOutboundChannel(partnerInfo.id);
+        await ensureOutboundChannel(targetUserId);
         await sendSignal('call-hangup', { reason: 'ended' });
       } catch (error) {
         console.error('Failed to end call:', error);

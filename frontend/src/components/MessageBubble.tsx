@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, memo } from 'react';
 import { View, Text, TouchableOpacity, Image, Alert, StyleSheet, Platform, Linking } from 'react-native';
 import { Check, CheckCheck, Play, Pause, Reply } from 'lucide-react-native';
 import { Audio } from 'expo-av';
+import { File, Paths } from 'expo-file-system';
 import { useTheme } from '../context/ThemeContext';
 import { formatMessageTime } from '../utils/date';
 
@@ -22,7 +23,7 @@ interface MessageBubbleProps {
   onDelete?: () => void;
   onReply?: () => void;
   mediaUrl?: string;
-  messageType?: 'text' | 'image' | 'video' | 'audio';
+  messageType?: 'text' | 'image' | 'video' | 'audio' | 'voice';
   replyToMessage?: ReplyToMessage | null;
   onImageTap?: (uri: string) => void;
   onMediaTap?: (uri: string, type: 'image' | 'video' | 'audio') => void;
@@ -30,6 +31,14 @@ interface MessageBubbleProps {
 
 // URL detection regex
 const URL_REGEX = /\b(https?:\/\/[^\s]+)/g;
+
+const getMediaExtension = (uri: string, messageType?: string) => {
+  const cleanUri = uri.split('?')[0];
+  const ext = cleanUri.split('.').pop()?.toLowerCase();
+
+  if (ext && ext.length <= 5 && /^[a-z0-9]+$/.test(ext)) return ext;
+  return messageType === 'video' ? 'mp4' : 'jpg';
+};
 
 interface TextPart {
   type: 'text' | 'url';
@@ -73,6 +82,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = memo(
     const [duration, setDuration] = useState(0);
     const soundRef = useRef<Audio.Sound | null>(null);
 
+    const normalizedMessageType = messageType === 'voice' ? 'audio' : messageType;
+
     const isEmojiOnly = content
       ? /^[\p{Emoji_Presentation}\p{Extended_Pictographic}]{1,8}$/u.test(content.trim())
       : false;
@@ -103,10 +114,15 @@ export const MessageBubble: React.FC<MessageBubbleProps> = memo(
     };
 
     const handleLongPress = () => {
-      if (!onDelete && !onReply) return;
+      const canSaveMedia = !!mediaUrl && (normalizedMessageType === 'image' || normalizedMessageType === 'video');
+      if (!onDelete && !onReply && !canSaveMedia) return;
+
       const buttons: any[] = [
         { text: 'Cancel', style: 'cancel' },
       ];
+      if (canSaveMedia) {
+        buttons.push({ text: 'Save media', style: 'default', onPress: handleDownloadMedia });
+      }
       if (onReply) {
         buttons.push({ text: 'Reply', style: 'default', onPress: onReply });
       }
@@ -132,6 +148,32 @@ export const MessageBubble: React.FC<MessageBubbleProps> = memo(
         onMediaTap(mediaUrl, 'video');
       }
     };
+
+    async function handleDownloadMedia() {
+      if (!mediaUrl || (normalizedMessageType !== 'image' && normalizedMessageType !== 'video')) return;
+
+      try {
+        if (Platform.OS === 'web') {
+          const link = document.createElement('a');
+          link.href = mediaUrl;
+          link.download = `couplechat-${Date.now()}.${getMediaExtension(mediaUrl, normalizedMessageType)}`;
+          link.target = '_blank';
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          return;
+        }
+
+        const extension = getMediaExtension(mediaUrl, normalizedMessageType);
+        const fileName = `couplechat-${Date.now()}.${extension}`;
+        await File.downloadFileAsync(mediaUrl, new File(Paths.document, fileName), { idempotent: true });
+
+        Alert.alert('Downloaded', `Saved to app storage as ${fileName}`);
+      } catch (error) {
+        console.error('Media download failed:', error);
+        Alert.alert('Download failed', 'Could not download this media. Please check your connection and try again.');
+      }
+    }
 
     const handleAudioTap = () => {
       if (!mediaUrl) return;
@@ -169,6 +211,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = memo(
         setIsPlaying(true);
       } catch (error) {
         console.error('Failed to play audio:', error);
+        Alert.alert('Playback failed', 'Could not play this voice message. Please check your connection and try again.');
+        setIsPlaying(false);
       }
     };
 
@@ -254,10 +298,10 @@ export const MessageBubble: React.FC<MessageBubbleProps> = memo(
             styles.bubble,
             {
               backgroundColor: isMe ? colors.bubbleSentBg : colors.bubbleReceivedBg,
-              borderBottomRightRadius: isMe ? 4 : 18,
-              borderBottomLeftRadius: isMe ? 18 : 4,
+              borderBottomRightRadius: isMe ? 8 : 22,
+              borderBottomLeftRadius: isMe ? 22 : 8,
               borderColor: colors.glassBorder,
-              borderWidth: colors.borderWidth > 0 ? colors.borderWidth : 0,
+              borderWidth: colors.borderWidth > 0 ? colors.borderWidth : StyleSheet.hairlineWidth,
             },
           ]}
         >
@@ -286,7 +330,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = memo(
           )}
 
           {/* Audio/Voice message */}
-          {messageType === 'audio' && mediaUrl ? (
+          {normalizedMessageType === 'audio' && mediaUrl ? (
             <View style={styles.audioContainer}>
               <TouchableOpacity
                 activeOpacity={0.7}
@@ -346,19 +390,19 @@ const styles = StyleSheet.create({
   bubble: {
     minWidth: 40,
     maxWidth: '80%',
-    borderRadius: 16,
+    borderRadius: 22,
     paddingHorizontal: 14,
     paddingVertical: 8,
     overflow: 'hidden',
     ...Platform.select({
       ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.12,
-        shadowRadius: 3,
+        shadowColor: '#B94CFF',
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.18,
+        shadowRadius: 20,
       },
       android: {
-        elevation: 3,
+        elevation: 5,
       },
     }),
   },
@@ -402,6 +446,7 @@ const styles = StyleSheet.create({
     marginHorizontal: -14,
     marginTop: -8,
     marginBottom: 2,
+    position: 'relative',
   },
   mediaImage: {
     width: 200,
@@ -491,6 +536,9 @@ const styles = StyleSheet.create({
     paddingLeft: 8,
     marginBottom: 6,
     paddingVertical: 6,
+    paddingRight: 8,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.06)',
   },
   quoteTopRow: {
     flexDirection: 'row',

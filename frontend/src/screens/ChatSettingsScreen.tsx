@@ -1,10 +1,16 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, Image, ScrollView, Switch } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, Image, ScrollView, Dimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChevronLeft, Shield, Bell, MessageSquare, Eraser, Image as ImageIcon, Link, LogOut } from 'lucide-react-native';
+import { ChevronLeft, Bell, MessageSquare, Eraser, Image as ImageIcon, Link, LogOut, Palette, Upload, RotateCcw } from 'lucide-react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
+import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
-import { chatSettingsService } from '../services/supabaseService';
+import { chatSettingsService, storageService } from '../services/supabaseService';
+import { chatBackgroundPresets, defaultChatBackgroundSettings, normalizeBackgroundOpacity } from '../utils/chatBackground';
+
+const { height } = Dimensions.get('window');
 
 export const ChatSettingsScreen = ({ route, navigation }: any) => {
   const { pairId, partner } = route.params;
@@ -12,6 +18,102 @@ export const ChatSettingsScreen = ({ route, navigation }: any) => {
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const [isBlocked, setIsBlocked] = useState(false);
+  const [backgroundSettings, setBackgroundSettings] = useState(defaultChatBackgroundSettings);
+  const [isUploadingBackground, setIsUploadingBackground] = useState(false);
+  const [contentCounts, setContentCounts] = useState({ mediaCount: 0, linkCount: 0, docsCount: 0 });
+
+  useEffect(() => {
+    let active = true;
+
+    (async () => {
+      const [backgroundSettingsResult, counts] = await Promise.all([
+        chatSettingsService.getChatBackground(pairId),
+        chatSettingsService.getChatContentCounts(pairId),
+      ]);
+
+      if (active) {
+        setBackgroundSettings(backgroundSettingsResult);
+        setContentCounts(counts);
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [pairId]);
+
+  const handleSelectBackground = async (backgroundId: string) => {
+    setBackgroundSettings((current) => ({ ...current, background_id: backgroundId }));
+    try {
+      await chatSettingsService.setChatBackground(pairId, backgroundId);
+    } catch (error) {
+      Alert.alert('Could not save', 'Please check your connection and try again.');
+    }
+  };
+
+  const handleUploadBackground = async () => {
+    if (isUploadingBackground) return;
+
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert('Permission required', 'Please allow photo access to choose a chat background.');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        quality: 0.85,
+      });
+
+      if (result.canceled || !result.assets[0]) return;
+
+      const asset = result.assets[0];
+      const mimeType = asset.mimeType || 'image/jpeg';
+      const ext = mimeType.includes('png') ? 'png' : 'jpg';
+      const fileName = asset.fileName || `chat-background.${ext}`;
+
+      setIsUploadingBackground(true);
+      const backgroundUrl = await storageService.uploadFile({
+        uri: asset.uri,
+        name: fileName,
+        type: mimeType,
+      }, 'chat-media');
+
+      const nextSettings = {
+        ...backgroundSettings,
+        background_image_url: backgroundUrl,
+      };
+      setBackgroundSettings(nextSettings);
+      await chatSettingsService.updateChatBackground(pairId, nextSettings);
+    } catch (error: any) {
+      Alert.alert('Upload failed', error.message || 'Could not update chat background.');
+    } finally {
+      setIsUploadingBackground(false);
+    }
+  };
+
+  const handleClearCustomBackground = async () => {
+    const nextSettings = { ...backgroundSettings, background_image_url: null };
+    setBackgroundSettings(nextSettings);
+    try {
+      await chatSettingsService.updateChatBackground(pairId, nextSettings);
+    } catch (error) {
+      Alert.alert('Could not save', 'Please check your connection and try again.');
+    }
+  };
+
+  const handleOpacityChange = async (nextOpacity: number) => {
+    const normalizedOpacity = normalizeBackgroundOpacity(nextOpacity);
+    const nextSettings = { ...backgroundSettings, background_opacity: normalizedOpacity };
+    setBackgroundSettings(nextSettings);
+    try {
+      await chatSettingsService.updateChatBackground(pairId, nextSettings);
+    } catch (error) {
+      Alert.alert('Could not save', 'Please check your connection and try again.');
+    }
+  };
 
   const handleClearChat = async () => {
     Alert.alert(
@@ -60,33 +162,43 @@ export const ChatSettingsScreen = ({ route, navigation }: any) => {
   const statusText = isBlocked ? 'Blocked' : 'Active';
   const statusColor = isBlocked ? '#FF4B4B' : colors.tertiary;
   const avatarSeed = partner?.name || partner?.email || 'Partner';
+  const avatarSource = partner?.avatar_url
+    ? { uri: partner.avatar_url }
+    : { uri: `https://api.dicebear.com/7.x/avataaars/svg?seed=${avatarSeed}` };
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}> 
+      <View style={StyleSheet.absoluteFill}>
+        <LinearGradient colors={colors.gradientPrimary as any} style={StyleSheet.absoluteFill} />
+        <LinearGradient colors={['rgba(185, 76, 255, 0.42)', 'transparent'] as any} style={[styles.glowBall, { top: -120, right: -90, width: 340, height: 340 }]} />
+        <LinearGradient colors={['rgba(37, 214, 255, 0.2)', 'transparent'] as any} style={[styles.glowBall, { top: height * 0.34, left: -130, width: 300, height: 300 }]} />
+        <LinearGradient colors={['rgba(255, 122, 92, 0.16)', 'transparent'] as any} style={[styles.glowBall, { bottom: -90, right: -80, width: 280, height: 280 }]} />
+      </View>
+
       {/* Header */}
-      <View style={[styles.headerBar, { paddingTop: insets.top + 8, borderBottomColor: colors.glassBorder, borderBottomWidth: StyleSheet.hairlineWidth }]}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+      <BlurView intensity={colors.glassBlur} tint={isDark ? 'dark' : 'light'} style={[styles.headerBar, { paddingTop: insets.top + 8, borderBottomColor: colors.glassBorder, borderBottomWidth: StyleSheet.hairlineWidth }]}> 
+        <TouchableOpacity onPress={() => navigation.goBack()} style={[styles.backBtn, { borderColor: colors.glassBorder }]}> 
           <ChevronLeft size={28} color={colors.text} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.text }]}>Chat Info</Text>
         <View style={{ width: 40 }} />
-      </View>
+      </BlurView>
 
       <ScrollView contentContainerStyle={styles.scrollArea} showsVerticalScrollIndicator={false}>
         {/* Partner Profile Header */}
-        <View style={styles.profileHeader}>
+        <BlurView intensity={colors.glassBlur} tint={isDark ? 'dark' : 'light'} style={[styles.profileHeader, { borderColor: colors.glassBorder }]}> 
           <Image
-            source={{ uri: `https://api.dicebear.com/7.x/avataaars/svg?seed=${avatarSeed}` }}
-            style={[styles.profileAvatar, { borderRadius: colors.radius.pill }]}
+            source={avatarSource}
+            style={[styles.profileAvatar, { borderRadius: colors.radius.pill, borderColor: colors.glassBorder }]}
           />
           <Text style={[styles.profileName, { color: colors.text }]}>{partner?.name || 'Partner'}</Text>
-          <Text style={[styles.profileStatus, { color: statusColor }]}>
+          <Text style={[styles.profileStatus, { color: statusColor }]}> 
             {statusText}
           </Text>
-        </View>
+        </BlurView>
 
         {/* Settings Menu Items */}
-        <View style={styles.section}>
+        <BlurView intensity={colors.glassBlur} tint={isDark ? 'dark' : 'light'} style={[styles.section, { borderColor: colors.glassBorder }]}> 
           <SettingItem
             icon={<Bell size={20} color={colors.text} />}
             label="Notifications"
@@ -94,28 +206,89 @@ export const ChatSettingsScreen = ({ route, navigation }: any) => {
             onPress={() => {}}
             isLast
           />
-        </View>
+        </BlurView>
 
-        <View style={styles.section}>
+        <BlurView intensity={colors.glassBlur} tint={isDark ? 'dark' : 'light'} style={[styles.section, { borderColor: colors.glassBorder }]}> 
+          <View style={styles.menuItem}>
+            <Palette size={20} color={colors.text} />
+            <Text style={[styles.menuLabel, { color: colors.text }]}>Chat Background</Text>
+          </View>
+          <View style={styles.backgroundGrid}>
+            {chatBackgroundPresets.map((preset) => {
+              const isSelected = backgroundSettings.background_id === preset.id;
+              return (
+                <TouchableOpacity
+                  key={preset.id}
+                  style={[styles.backgroundOption, isSelected && { borderColor: colors.primary }]}
+                  onPress={() => handleSelectBackground(preset.id)}
+                  activeOpacity={0.8}
+                >
+                  <LinearGradient colors={preset.preview as any} style={styles.backgroundPreview} />
+                  <Text style={[styles.backgroundName, { color: isSelected ? colors.text : colors.gray }]} numberOfLines={1}>
+                    {preset.name}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+          <View style={styles.customBackgroundArea}>
+            <TouchableOpacity style={[styles.uploadButton, { borderColor: colors.glassBorder }]} onPress={handleUploadBackground} disabled={isUploadingBackground}>
+              <Upload size={18} color={colors.primary} />
+              <Text style={[styles.uploadText, { color: colors.text }]}>{isUploadingBackground ? 'Uploading...' : 'Upload Image'}</Text>
+            </TouchableOpacity>
+            {backgroundSettings.background_image_url && (
+              <TouchableOpacity style={[styles.uploadButton, { borderColor: colors.glassBorder }]} onPress={handleClearCustomBackground}>
+                <RotateCcw size={18} color={colors.gray} />
+                <Text style={[styles.uploadText, { color: colors.gray }]}>Remove Image</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+          {backgroundSettings.background_image_url && (
+            <View style={styles.opacityArea}>
+              <Text style={[styles.opacityLabel, { color: colors.gray }]}>Image opacity</Text>
+              <View style={styles.opacityControls}>
+                {[0.2, 0.38, 0.55, 0.72].map((opacity) => {
+                  const isSelected = Math.abs(backgroundSettings.background_opacity - opacity) < 0.03;
+                  return (
+                    <TouchableOpacity
+                      key={opacity}
+                      style={[styles.opacityPill, { borderColor: isSelected ? colors.primary : colors.glassBorder, backgroundColor: isSelected ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.06)' }]}
+                      onPress={() => handleOpacityChange(opacity)}
+                    >
+                      <Text style={[styles.opacityText, { color: isSelected ? colors.text : colors.gray }]}>{Math.round(opacity * 100)}%</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+          )}
+        </BlurView>
+
+        <BlurView intensity={colors.glassBlur} tint={isDark ? 'dark' : 'light'} style={[styles.section, { borderColor: colors.glassBorder }]}> 
           <View style={styles.menuItem}>
             <MessageSquare size={20} color={colors.text} />
             <Text style={[styles.menuLabel, { color: colors.text }]}>Media, Links &amp; Docs</Text>
           </View>
-          <View style={[styles.mediaCount, { backgroundColor: 'rgba(255,255,255,0.04)' }]}>
+          <View style={[styles.mediaCount, { backgroundColor: 'rgba(255,255,255,0.07)', borderColor: colors.glassBorder }]}> 
             <View style={styles.mediaCountItem}>
               <ImageIcon size={16} color={colors.gray} />
               <Text style={[styles.mediaLabel, { color: colors.gray }]}>Photos &amp; Videos</Text>
-              <Text style={[styles.mediaValue, { color: colors.text }]}>0</Text>
+              <Text style={[styles.mediaValue, { color: colors.text }]}>{contentCounts.mediaCount}</Text>
             </View>
             <View style={styles.mediaCountItem}>
               <Link size={16} color={colors.gray} />
               <Text style={[styles.mediaLabel, { color: colors.gray }]}>Links</Text>
-              <Text style={[styles.mediaValue, { color: colors.text }]}>0</Text>
+              <Text style={[styles.mediaValue, { color: colors.text }]}>{contentCounts.linkCount}</Text>
+            </View>
+            <View style={styles.mediaCountItem}>
+              <MessageSquare size={16} color={colors.gray} />
+              <Text style={[styles.mediaLabel, { color: colors.gray }]}>Docs</Text>
+              <Text style={[styles.mediaValue, { color: colors.text }]}>{contentCounts.docsCount}</Text>
             </View>
           </View>
-        </View>
+        </BlurView>
 
-        <View style={styles.section}>
+        <BlurView intensity={colors.glassBlur} tint={isDark ? 'dark' : 'light'} style={[styles.section, { borderColor: colors.glassBorder }]}> 
           <TouchableOpacity style={styles.menuItem} onPress={handleClearChat}>
             <Eraser size={20} color={colors.text} />
             <Text style={[styles.menuLabel, { color: colors.text }]}>Clear Chat</Text>
@@ -128,7 +301,7 @@ export const ChatSettingsScreen = ({ route, navigation }: any) => {
             </Text>
             <ChevronLeft size={18} color={colors.gray} style={{ transform: [{ rotate: '180deg' }] }} />
           </TouchableOpacity>
-        </View>
+        </BlurView>
       </ScrollView>
     </View>
   );
@@ -151,27 +324,40 @@ function SettingItem({ icon, label, value, onPress, isLast }: {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  headerBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 12, justifyContent: 'space-between' },
-  backBtn: { width: 40, height: 40, justifyContent: 'center', alignItems: 'center' },
+  glowBall: { position: 'absolute', borderRadius: 180, overflow: 'hidden' },
+  headerBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 12, justifyContent: 'space-between', backgroundColor: 'rgba(255,255,255,0.08)', overflow: 'hidden' },
+  backBtn: { width: 40, height: 40, borderRadius: 18, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.08)', borderWidth: StyleSheet.hairlineWidth },
   headerTitle: { fontSize: 20, fontWeight: '700' },
   scrollArea: { paddingHorizontal: 16, paddingTop: 20 },
 
   // Profile header
-  profileHeader: { alignItems: 'center', marginBottom: 30, paddingBottom: 20 },
-  profileAvatar: { width: 80, height: 80, marginBottom: 12 },
+  profileHeader: { alignItems: 'center', marginBottom: 24, paddingVertical: 24, borderRadius: 30, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, backgroundColor: 'rgba(255,255,255,0.08)', shadowColor: '#B94CFF', shadowOffset: { width: 0, height: 14 }, shadowOpacity: 0.22, shadowRadius: 26, elevation: 5 },
+  profileAvatar: { width: 88, height: 88, marginBottom: 12, borderWidth: StyleSheet.hairlineWidth },
   profileName: { fontSize: 22, fontWeight: '700' },
   profileStatus: { fontSize: 14, marginTop: 4 },
 
   // Sections
-  section: { marginBottom: 24 },
+  section: { marginBottom: 18, borderRadius: 24, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, backgroundColor: 'rgba(255,255,255,0.075)', shadowColor: '#000', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.18, shadowRadius: 22, elevation: 4 },
   menuItem: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: 'rgba(255,255,255,0.06)' },
   menuLabel: { flex: 1, fontSize: 16, fontWeight: '500', marginLeft: 14 },
   settingValue: { fontSize: 14, color: 'rgba(255,255,255,0.5)' },
   menuItemLast: { borderBottomWidth: 0 },
 
   // Media counts
-  mediaCount: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 14 },
+  mediaCount: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 18, margin: 12, borderWidth: StyleSheet.hairlineWidth },
   mediaCountItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10 },
   mediaLabel: { flex: 1, fontSize: 15, marginLeft: 14 },
   mediaValue: { fontSize: 15 },
+  backgroundGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, padding: 12 },
+  backgroundOption: { width: '30%', minWidth: 88, borderRadius: 18, padding: 6, borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)', backgroundColor: 'rgba(255,255,255,0.06)' },
+  backgroundPreview: { height: 64, borderRadius: 14, marginBottom: 8 },
+  backgroundName: { fontSize: 11, fontWeight: '600', textAlign: 'center' },
+  customBackgroundArea: { flexDirection: 'row', gap: 10, paddingHorizontal: 12, paddingBottom: 12 },
+  uploadButton: { flex: 1, minHeight: 46, borderRadius: 18, borderWidth: StyleSheet.hairlineWidth, backgroundColor: 'rgba(255,255,255,0.08)', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 10 },
+  uploadText: { fontSize: 13, fontWeight: '700' },
+  opacityArea: { paddingHorizontal: 12, paddingBottom: 14 },
+  opacityLabel: { fontSize: 12, fontWeight: '700', textTransform: 'uppercase', marginBottom: 8 },
+  opacityControls: { flexDirection: 'row', gap: 8 },
+  opacityPill: { flex: 1, height: 36, borderRadius: 18, borderWidth: StyleSheet.hairlineWidth, alignItems: 'center', justifyContent: 'center' },
+  opacityText: { fontSize: 12, fontWeight: '700' },
 });
