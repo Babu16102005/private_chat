@@ -6,7 +6,7 @@ export type ThemeMode = 'obsidian' | 'mocha';
 export interface ThemeColors {
   primary: string;
   secondary: string;
-  tertiary: string; 
+  tertiary: string;
   background: string;
   bubbleSentBg: string; // Specific for sent bubbles
   bubbleReceivedBg: string; // Specific for received bubbles
@@ -31,56 +31,56 @@ export interface ThemeColors {
 }
 
 const obsidianTheme: ThemeColors = {
-  primary: '#B94CFF', // Neon orchid
-  secondary: '#25D6FF', 
-  tertiary: '#33FFB7', // Online glow
-  background: '#05000D',
-  bubbleSentBg: 'rgba(115, 66, 168, 0.42)',
-  bubbleReceivedBg: 'rgba(18, 8, 42, 0.58)',
+  primary: '#E9C7FF',
+  secondary: '#64F3FF',
+  tertiary: '#8DFFD5',
+  background: '#050712',
+  bubbleSentBg: 'rgba(255, 255, 255, 0.12)',
+  bubbleReceivedBg: 'rgba(255, 255, 255, 0.06)',
   white: '#FFFFFF',
   black: '#000000',
-  gray: '#A1A1A1',
-  lightGray: 'rgba(255, 255, 255, 0.05)',
-  text: '#FFFFFF',
-  gradientPrimary: ['#210044', '#0B0620', '#020006'],
-  gradientSecondary: ['rgba(255,255,255,0.08)', 'rgba(255,255,255,0.3)', 'rgba(167,64,255,0.26)', 'rgba(255,255,255,0.08)'],
-  glassBorder: 'rgba(255, 255, 255, 0.15)',
-  borderWidth: StyleSheet.hairlineWidth,
-  glassOpacity: 0.16,
-  glassBlur: 40,
+  gray: 'rgba(234, 244, 255, 0.66)',
+  lightGray: 'rgba(255, 255, 255, 0.055)',
+  text: '#F8FBFF',
+  gradientPrimary: ['#101B38', '#060A19', '#182450', '#050712'],
+  gradientSecondary: ['rgba(255,255,255,0.36)', 'rgba(100,243,255,0.34)', 'rgba(233,199,255,0.36)', 'rgba(141,255,213,0.22)'],
+  glassBorder: 'rgba(255, 255, 255, 0.18)',
+  borderWidth: 0.5,
+  glassOpacity: 0.12,
+  glassBlur: 80,
   radius: {
     pill: 999,
     panel: 40,
     card: 20,
     bubble: 20,
-    story: 999 // Perfect circles for Obsidian
+    story: 999
   }
 };
 
 const mochaTheme: ThemeColors = {
   primary: '#FF7A5C', // Living coral
-  secondary: '#FF3B86', 
-  tertiary: '#FFD36E', 
+  secondary: '#FF3B86',
+  tertiary: '#FFD36E',
   background: '#09010C', // Warm plum espresso
-  bubbleSentBg: 'rgba(126, 57, 126, 0.42)', // Glass dark
-  bubbleReceivedBg: 'rgba(26, 8, 32, 0.58)', // Glass frosted
+  bubbleSentBg: 'rgba(255, 255, 255, 0.12)',
+  bubbleReceivedBg: 'rgba(255, 255, 255, 0.06)',
   white: 'rgba(255, 255, 255, 0.8)',
   black: '#100D0C',
   gray: 'rgba(255, 255, 255, 0.5)',
   lightGray: 'rgba(255, 255, 255, 0.05)',
   text: '#FDF7F2',
-  gradientPrimary: ['#2C0B32', '#0B0614', '#020006'], // Warm depth gradient
-  gradientSecondary: ['rgba(255,255,255,0.08)', 'rgba(255,255,255,0.28)', 'rgba(255,89,170,0.24)', 'rgba(255,255,255,0.08)'],
-  glassBorder: 'rgba(255, 255, 255, 0.15)',
-  borderWidth: StyleSheet.hairlineWidth,
-  glassOpacity: 0.1,
-  glassBlur: 40, // Strong glass frosted
+  gradientPrimary: ['#21111A', '#100912', '#050305'], // Warm depth gradient
+  gradientSecondary: ['rgba(255,255,255,0.34)', 'rgba(255,122,92,0.32)', 'rgba(255,211,110,0.2)', 'rgba(255,255,255,0.16)'],
+  glassBorder: 'rgba(255, 255, 255, 0.18)',
+  borderWidth: 0.5,
+  glassOpacity: 0.12,
+  glassBlur: 80,
   radius: {
     pill: 30,
     panel: 40,
     card: 24,
     bubble: 18,
-    story: 18 // Rounded squares for Mocha
+    story: 999
   }
 };
 
@@ -94,7 +94,7 @@ interface ThemeContextType {
 const ThemeContext = createContext<ThemeContextType>({
   themeMode: 'obsidian',
   isDark: true,
-  toggleTheme: () => {},
+  toggleTheme: () => { },
   colors: obsidianTheme,
 });
 

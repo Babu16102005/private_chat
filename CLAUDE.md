@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**CoupleChat** — a private, one-to-one chat application built for couples using React Native (Expo ~54) + Supabase backend. Supports real-time messaging, WebRTC video/audio calls, message reactions, media sharing, and invite-based pairing.
+**kiba** — a private, one-to-one chat application built for couples using React Native (Expo ~54) + Supabase backend. Supports real-time messaging, WebRTC video/audio calls, message reactions, media sharing, and invite-based pairing.
 
 ## Tech Stack
 

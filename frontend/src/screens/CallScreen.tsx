@@ -136,9 +136,9 @@ export const CallScreen = () => {
       )}
 
       {/* Controls Overlay */}
-      <BlurView intensity={30} tint={isDark ? 'dark' : 'light'} style={styles.controlsOverlay}>
+      <BlurView intensity={colors.glassBlur + 18} tint={isDark ? 'dark' : 'light'} style={[styles.controlsOverlay, { borderColor: colors.glassBorder, borderWidth: colors.borderWidth }]}> 
         <View style={styles.controlsRow}>
-          <TouchableOpacity onPress={toggleMute} style={[styles.controlBtn, { backgroundColor: isMuted ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.1)' }]}>
+          <TouchableOpacity onPress={toggleMute} style={[styles.controlBtn, { backgroundColor: isMuted ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.12)', borderColor: colors.glassBorder, borderWidth: 0.5 }]}> 
             {isMuted ? <MicOff color="white" size={26} /> : <Mic color="white" size={26} />}
           </TouchableOpacity>
 
@@ -158,7 +158,7 @@ export const CallScreen = () => {
           )}
 
           {isVideoCall && (
-            <TouchableOpacity onPress={toggleCamera} style={[styles.controlBtn, { backgroundColor: isCameraOff ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.1)' }]}> 
+            <TouchableOpacity onPress={toggleCamera} style={[styles.controlBtn, { backgroundColor: isCameraOff ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.12)', borderColor: colors.glassBorder, borderWidth: 0.5 }]}> 
               {isCameraOff ? <CameraOff color="white" size={26} /> : <Camera color="white" size={26} />}
             </TouchableOpacity>
           )}
@@ -223,7 +223,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderTopLeftRadius: 40,
     borderTopRightRadius: 40,
-    overflow: 'hidden'
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255,255,255,0.1)'
   },
   controlsRow: { 
     flexDirection: 'row', 
@@ -235,7 +236,12 @@ const styles = StyleSheet.create({
     height: 64, 
     borderRadius: 32, 
     justifyContent: 'center', 
-    alignItems: 'center' 
+    alignItems: 'center',
+    shadowColor: '#E9C7FF',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.24,
+    shadowRadius: 20,
+    elevation: 7
   },
   endCallBtn: { backgroundColor: '#FF4B4B' },
   acceptCallBtn: { backgroundColor: '#10B981' }

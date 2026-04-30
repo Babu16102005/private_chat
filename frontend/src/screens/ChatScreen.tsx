@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
-import { View, Text, TextInput, TouchableOpacity, FlatList, StyleSheet, Image, Alert, Platform, KeyboardAvoidingView, Dimensions, Animated } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, FlatList, StyleSheet, Image, Alert, Platform, KeyboardAvoidingView, Animated } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
-import { ChevronLeft, Phone, Video, Mic, Camera, SendHorizontal, Search, X, Square, MoreVertical, Reply as ReplyIcon } from 'lucide-react-native';
+import { ChevronLeft, Phone, Video, Mic, Camera, SendHorizontal, Search, X, CircleStop, MoreVertical, Reply as ReplyIcon } from 'lucide-react-native';
 import { messageService, deleteMessageService, storageService, profileService, messageReactionsService, chatSettingsService } from '../services/supabaseService';
 import * as ImagePicker from 'expo-image-picker';
 import { useAudioRecorder, AudioModule, RecordingPresets, setAudioModeAsync } from 'expo-audio';
@@ -19,8 +19,6 @@ import { useCall } from '../context/CallContext';
 import { defaultChatBackgroundSettings, getChatBackgroundPreset } from '../utils/chatBackground';
 
 import { formatMessageTime, formatDateHeader, getDateKey } from '../utils/date';
-
-const { width, height } = Dimensions.get('window');
 
 type MessageDateGroup = { dateKey: string; messages: any[] };
 
@@ -353,7 +351,7 @@ export const ChatScreen = ({ route, navigation }: any) => {
 
   const stopVoice = async () => {
     if (!isRecordingRef.current || isRecordingTransitionRef.current) return;
-    
+
     try {
       isRecordingTransitionRef.current = true;
       pulseAnim.stopAnimation();
@@ -419,7 +417,7 @@ export const ChatScreen = ({ route, navigation }: any) => {
     return (
       <>
         <View style={styles.dateSeparator}>
-          <View style={[styles.datePill, { backgroundColor: 'rgba(128,128,128,0.15)' }]}>
+          <View style={[styles.datePill, { backgroundColor: 'rgba(255,255,255,0.1)' }]}>
             <Text style={[styles.dateText, { color: 'rgba(255,255,255,0.5)' }]}>
               {formatDateHeader(group.dateKey)}
             </Text>
@@ -501,7 +499,9 @@ export const ChatScreen = ({ route, navigation }: any) => {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Subtle background gradient */}
       <View style={StyleSheet.absoluteFill}>
-        <LinearGradient colors={chatBackground.gradient as any} style={StyleSheet.absoluteFill} />
+        <LinearGradient colors={chatBackground.gradient as any} start={{ x: 0.1, y: 0 }} end={{ x: 0.96, y: 1 }} style={StyleSheet.absoluteFill} />
+        <LinearGradient colors={[chatBackground.glows[0], chatBackground.glows[1], 'transparent'] as any} start={{ x: 1, y: 0 }} end={{ x: 0.12, y: 0.72 }} style={StyleSheet.absoluteFill} />
+        <LinearGradient colors={['transparent', chatBackground.glows[2], 'rgba(0,0,0,0.22)'] as any} start={{ x: 0, y: 0.24 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
         {backgroundSettings.background_image_url && (
           <Image
             source={{ uri: backgroundSettings.background_image_url }}
@@ -512,9 +512,6 @@ export const ChatScreen = ({ route, navigation }: any) => {
         {backgroundSettings.background_image_url && (
           <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.28)' }]} />
         )}
-        <LinearGradient colors={[chatBackground.glows[0], 'transparent'] as any} style={[styles.glowBall, { top: -80, right: -80, width: 280, height: 280 }]} />
-        <LinearGradient colors={[chatBackground.glows[1], 'transparent'] as any} style={[styles.glowBall, { top: height * 0.28, left: -90, width: 240, height: 240 }]} />
-        <LinearGradient colors={[chatBackground.glows[2], 'transparent'] as any} style={[styles.glowBall, { bottom: 40, right: -90, width: 260, height: 260 }]} />
       </View>
 
       {/* ImageViewer modal */}
@@ -541,7 +538,7 @@ export const ChatScreen = ({ route, navigation }: any) => {
         <BlurView
           intensity={colors.glassBlur}
           tint={isDark ? 'dark' : 'light'}
-          style={[styles.headerBlur, { borderBottomColor: colors.glassBorder, borderBottomWidth: colors.borderWidth > 0 ? colors.borderWidth : 0.5 }]}
+          style={[styles.headerBlur, { borderBottomColor: colors.glassBorder, borderBottomWidth: colors.borderWidth }]}
         >
           <SafeAreaView edges={['top']} style={styles.headerSafe}>
             <View style={styles.headerContent}>
@@ -571,7 +568,7 @@ export const ChatScreen = ({ route, navigation }: any) => {
               <View style={styles.headerActions}>
                 <TouchableOpacity onPress={() => initiateCall(pairId, partner, false)} style={[styles.actionIcon, { borderColor: colors.glassBorder }]}><Phone size={22} color={colors.text} /></TouchableOpacity>
                 <TouchableOpacity onPress={() => initiateCall(pairId, partner, true)} style={[styles.actionIcon, { borderColor: colors.glassBorder }]}><Video size={22} color={colors.text} /></TouchableOpacity>
-                <TouchableOpacity onPress={() => setIsSearching(!isSearching)} style={[styles.actionIcon, { borderColor: colors.glassBorder }]}> 
+                <TouchableOpacity onPress={() => setIsSearching(!isSearching)} style={[styles.actionIcon, { borderColor: colors.glassBorder }]}>
                   {isSearching ? <X size={22} color={colors.text} /> : <Search size={22} color={colors.text} />}
                 </TouchableOpacity>
                 <TouchableOpacity onPress={openChatSettings} style={[styles.actionIcon, { borderColor: colors.glassBorder }]}><MoreVertical size={20} color={colors.text} /></TouchableOpacity>
@@ -582,7 +579,7 @@ export const ChatScreen = ({ route, navigation }: any) => {
                 <BlurView
                   intensity={colors.glassBlur}
                   tint={isDark ? 'dark' : 'light'}
-                  style={[styles.searchInputBar, { backgroundColor: 'rgba(255,255,255,0.12)', borderColor: colors.glassBorder, borderRadius: 18 }]}
+                  style={[styles.searchInputBar, { backgroundColor: 'rgba(255,255,255,0.08)', borderColor: colors.glassBorder, borderRadius: 18, borderWidth: colors.borderWidth }]}
                 >
                   <Search size={18} color={colors.gray} style={{ marginRight: 8 }} />
                   <TextInput
@@ -592,6 +589,7 @@ export const ChatScreen = ({ route, navigation }: any) => {
                     value={searchQuery}
                     onChangeText={setSearchQuery}
                     autoFocus
+                    underlineColorAndroid="transparent"
                   />
                   {searchQuery.length > 0 && (
                     <TouchableOpacity onPress={() => setSearchQuery('')}>
@@ -611,7 +609,11 @@ export const ChatScreen = ({ route, navigation }: any) => {
             data={groupedMessages}
             renderItem={renderMessageGroup}
             keyExtractor={(item) => item.dateKey + (item.messages[0]?.id || '')}
-            contentContainerStyle={[styles.listInside, isSearching && { paddingBottom: 0 }]}
+            contentContainerStyle={[
+              styles.listInside, 
+              { paddingTop: insets.top + 64 + (isSearching ? 52 : 0) + 10 },
+              isSearching && { paddingBottom: 0 }
+            ]}
             showsVerticalScrollIndicator={false}
             ListHeaderComponent={messages.length <= 0 ? renderEmptyChat : null}
             ListFooterComponent={<View ref={footerRef as any} style={{ height: 8 }} />}
@@ -622,7 +624,10 @@ export const ChatScreen = ({ route, navigation }: any) => {
             data={filteredMessages}
             renderItem={renderSearchResultItem}
             keyExtractor={(item) => item.id}
-            contentContainerStyle={styles.listInside}
+            contentContainerStyle={[
+              styles.listInside,
+              { paddingTop: insets.top + 64 + (isSearching ? 52 : 0) + 10 }
+            ]}
             showsVerticalScrollIndicator={false}
             ListEmptyComponent={
               <View style={styles.searchEmpty}>
@@ -639,7 +644,10 @@ export const ChatScreen = ({ route, navigation }: any) => {
             data={groupedMessages}
             renderItem={renderMessageGroup}
             keyExtractor={(item) => item.dateKey + (item.messages[0]?.id || '')}
-            contentContainerStyle={styles.listInside}
+            contentContainerStyle={[
+              styles.listInside,
+              { paddingTop: insets.top + 64 + (isSearching ? 52 : 0) + 10 }
+            ]}
             showsVerticalScrollIndicator={false}
             ListEmptyComponent={renderEmptyChat}
             ListFooterComponent={<View ref={footerRef as any} style={{ height: 8 }} />}
@@ -675,18 +683,13 @@ export const ChatScreen = ({ route, navigation }: any) => {
             intensity={colors.glassBlur + 10}
             tint={isDark ? 'dark' : 'light'}
             style={[styles.inputBar, {
-              backgroundColor: 'rgba(255,255,255,0.12)',
+              backgroundColor: 'rgba(255,255,255,0.08)',
               borderColor: colors.glassBorder,
-              borderWidth: StyleSheet.hairlineWidth,
+              borderWidth: colors.borderWidth,
             }]}
           >
-            <LinearGradient
-              colors={['rgba(255,255,255,0.16)', 'rgba(255,255,255,0.04)', 'rgba(185,76,255,0.12)'] as any}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={StyleSheet.absoluteFill}
-            />
-            <TouchableOpacity onPress={handleAttach} style={[styles.pillAction, styles.inputIconButton, { borderColor: colors.glassBorder }]}> 
+            <LinearGradient colors={['rgba(255,255,255,0.28)', 'rgba(255,255,255,0.1)', 'rgba(255,255,255,0.04)'] as any} style={StyleSheet.absoluteFill} />
+            <TouchableOpacity onPress={handleAttach} style={[styles.pillAction, styles.inputIconButton, { borderColor: colors.glassBorder }]}>
               <Camera size={21} color={colors.primary} strokeWidth={2} />
             </TouchableOpacity>
 
@@ -699,6 +702,7 @@ export const ChatScreen = ({ route, navigation }: any) => {
                 onChangeText={handleTyping}
                 multiline
                 maxLength={2000}
+                underlineColorAndroid="transparent"
               />
             </View>
 
@@ -710,8 +714,8 @@ export const ChatScreen = ({ route, navigation }: any) => {
                 </LinearGradient>
               </TouchableOpacity>
             ) : (
-              <TouchableOpacity onPress={isRecording ? stopVoice : startVoice} style={[styles.pillAction, styles.inputIconButton, { borderColor: colors.glassBorder }]}> 
-                {isRecording ? <Square size={20} color="#FF3B30" fill="#FF3B30" /> : <Mic size={22} color={colors.primary} strokeWidth={1.5} />}
+              <TouchableOpacity onPress={isRecording ? stopVoice : startVoice} style={[styles.pillAction, styles.inputIconButton, { borderColor: colors.glassBorder }]}>
+                {isRecording ? <CircleStop size={21} color="#FF3B30" fill="rgba(255,59,48,0.16)" /> : <Mic size={22} color={colors.primary} strokeWidth={1.5} />}
               </TouchableOpacity>
             )}
           </BlurView>
@@ -723,10 +727,8 @@ export const ChatScreen = ({ route, navigation }: any) => {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  glowBall: { position: 'absolute', borderRadius: 160, overflow: 'hidden' },
-
   // Header
-  headerBlur: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10, backgroundColor: 'rgba(255,255,255,0.12)' },
+  headerBlur: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10 },
   headerSafe: { paddingTop: 10 },
   headerContent: { flexDirection: 'row', alignItems: 'center', height: 64, paddingHorizontal: 12, justifyContent: 'space-between' },
   navBtn: { width: 40, height: 40, justifyContent: 'center', alignItems: 'center' },
@@ -739,23 +741,23 @@ const styles = StyleSheet.create({
   statusTxt: { fontSize: 12, fontWeight: '500' },
   offlineStatus: { opacity: 0.5 },
   headerActions: { flexDirection: 'row', gap: 2 },
-  actionIcon: { width: 40, height: 40, borderRadius: 18, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.12)', borderWidth: StyleSheet.hairlineWidth },
+  actionIcon: { width: 40, height: 40, borderRadius: 18, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.08)', borderWidth: 0.5 },
 
   // Search bar
   searchBarRow: { paddingHorizontal: 12, paddingBottom: 10 },
-  searchInputBar: { height: 42, borderRadius: 16, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth },
+  searchInputBar: { height: 42, borderRadius: 16, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, overflow: 'hidden' },
   searchField: { flex: 1, fontSize: 14 },
 
   // List
-  listInside: { paddingTop: 80, paddingHorizontal: 4 },
+  listInside: { paddingHorizontal: 4 },
 
   // Date separator (WhatsApp-style pill)
   dateSeparator: { alignItems: 'center', marginVertical: 12, marginHorizontal: 8 },
-  datePill: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 14, borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255,255,255,0.18)', backgroundColor: 'rgba(255,255,255,0.1)' },
+  datePill: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.08)' },
   dateText: { fontSize: 12, fontWeight: '600' },
 
   // Reply preview bar
-  replyPreviewBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, marginHorizontal: 8, borderRadius: 18, marginBottom: 4, borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255,255,255,0.12)' },
+  replyPreviewBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, marginHorizontal: 8, borderRadius: 18, marginBottom: 4 },
   replyAccentBar: { width: 4, height: '100%', borderRadius: 2, position: 'absolute', left: 0, top: 0 },
   replyContent: { flex: 1, gap: 2 },
   replyName: { fontSize: 12, fontWeight: '600' },
@@ -767,13 +769,13 @@ const styles = StyleSheet.create({
   recordingIndicator: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 6 },
   recordingDot: { width: 8, height: 8, borderRadius: 4, marginRight: 8 },
   recordingText: { color: '#FF3B30', fontSize: 13, fontWeight: '600' },
-  inputBar: { minHeight: 54, borderRadius: 28, flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: 8, paddingVertical: 7, overflow: 'hidden', shadowColor: '#B94CFF', shadowOffset: { width: 0, height: 14 }, shadowOpacity: 0.28, shadowRadius: 28, elevation: 8 },
+  inputBar: { minHeight: 54, borderRadius: 28, flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: 8, paddingVertical: 7, overflow: 'hidden' },
   inputShine: { position: 'absolute', top: 1, left: 18, right: 18, height: 1, backgroundColor: 'rgba(255,255,255,0.42)' },
   pillAction: { width: 40, height: 40, justifyContent: 'center', alignItems: 'center' },
-  inputIconButton: { borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.08)', borderWidth: StyleSheet.hairlineWidth },
+  inputIconButton: { borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.08)', borderWidth: 0.5 },
   inputTextWrap: { flex: 1, minHeight: 40, justifyContent: 'center', paddingHorizontal: 8 },
   inputField: { flex: 1, paddingHorizontal: 8, paddingTop: 9, paddingBottom: 8, fontSize: 15, fontWeight: '500', maxHeight: 104, minHeight: 40, textAlignVertical: 'center', letterSpacing: 0.1 },
-  sendBtn: { width: 40, height: 40, borderRadius: 20, marginLeft: 2, borderWidth: StyleSheet.hairlineWidth, backgroundColor: 'rgba(255,255,255,0.14)', shadowColor: '#D946EF', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.34, shadowRadius: 14, elevation: 6 },
+  sendBtn: { width: 40, height: 40, borderRadius: 20, marginLeft: 2, borderWidth: 0.5, backgroundColor: 'rgba(255,255,255,0.1)' },
   sendBtnGradient: { flex: 1, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
   sendBtnShine: { position: 'absolute', top: 1, left: 5, right: 5, height: 13, borderRadius: 999, opacity: 0.34 },
 

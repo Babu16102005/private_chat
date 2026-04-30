@@ -302,12 +302,12 @@ All errors should be handled gracefully with user-friendly messages.
 ### Android
 - Test on physical device (emulator may not have camera/microphone)
 - Requires custom dev build: `npx expo run:android`
-- Check Android system permissions in Settings > Apps > CoupleChat
+- Check Android system permissions in Settings > Apps > kiba
 
 ### iOS
 - Test on physical device (simulator may not have camera/microphone)
 - Requires custom dev build: `npx expo run:ios`
-- Check iOS system permissions in Settings > CoupleChat
+- Check iOS system permissions in Settings > kiba
 
 ### Expo Go
 - WebRTC is **not available** in Expo Go

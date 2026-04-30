@@ -1,5 +1,5 @@
 
-# 💬 CoupleChat – Full AI Development Master Prompt
+# 💬 kiba – Full AI Development Master Prompt
 ## React Native + FastAPI + Supabase
 
 ---
@@ -60,7 +60,7 @@ src/
 ## Invitation Flow
 1. Send invite to email
 2. Backend generates token
-3. Deep link: couplechat://accept?token=XYZ
+3. Deep link: kiba://accept?token=XYZ
 4. Validate token
 5. Create pair
 

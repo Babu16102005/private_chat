@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, Image, ScrollView, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, Image, ScrollView } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChevronLeft, Bell, MessageSquare, Eraser, Image as ImageIcon, Link, LogOut, Palette, Upload, RotateCcw } from 'lucide-react-native';
+import { ChevronLeft, Bell, MessagesSquare, Eraser, Image as ImageIcon, Link, LogOut, Palette, Upload, RotateCcw } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import * as ImagePicker from 'expo-image-picker';
@@ -9,8 +9,6 @@ import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { chatSettingsService, storageService } from '../services/supabaseService';
 import { chatBackgroundPresets, defaultChatBackgroundSettings, normalizeBackgroundOpacity } from '../utils/chatBackground';
-
-const { height } = Dimensions.get('window');
 
 export const ChatSettingsScreen = ({ route, navigation }: any) => {
   const { pairId, partner } = route.params;
@@ -169,10 +167,9 @@ export const ChatSettingsScreen = ({ route, navigation }: any) => {
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}> 
       <View style={StyleSheet.absoluteFill}>
-        <LinearGradient colors={colors.gradientPrimary as any} style={StyleSheet.absoluteFill} />
-        <LinearGradient colors={['rgba(185, 76, 255, 0.42)', 'transparent'] as any} style={[styles.glowBall, { top: -120, right: -90, width: 340, height: 340 }]} />
-        <LinearGradient colors={['rgba(37, 214, 255, 0.2)', 'transparent'] as any} style={[styles.glowBall, { top: height * 0.34, left: -130, width: 300, height: 300 }]} />
-        <LinearGradient colors={['rgba(255, 122, 92, 0.16)', 'transparent'] as any} style={[styles.glowBall, { bottom: -90, right: -80, width: 280, height: 280 }]} />
+        <LinearGradient colors={colors.gradientPrimary as any} start={{ x: 0.08, y: 0 }} end={{ x: 0.95, y: 1 }} style={StyleSheet.absoluteFill} />
+        <LinearGradient colors={['rgba(100,243,255,0.12)', 'rgba(233,199,255,0.07)', 'transparent'] as any} start={{ x: 1, y: 0 }} end={{ x: 0.18, y: 0.76 }} style={StyleSheet.absoluteFill} />
+        <LinearGradient colors={['transparent', 'rgba(141,255,213,0.08)', 'rgba(5,7,18,0.22)'] as any} start={{ x: 0, y: 0.25 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
       </View>
 
       {/* Header */}
@@ -186,7 +183,7 @@ export const ChatSettingsScreen = ({ route, navigation }: any) => {
 
       <ScrollView contentContainerStyle={styles.scrollArea} showsVerticalScrollIndicator={false}>
         {/* Partner Profile Header */}
-        <BlurView intensity={colors.glassBlur} tint={isDark ? 'dark' : 'light'} style={[styles.profileHeader, { borderColor: colors.glassBorder }]}> 
+        <BlurView intensity={colors.glassBlur} tint={isDark ? 'dark' : 'light'} style={[styles.profileHeader, { borderColor: colors.glassBorder, borderWidth: colors.borderWidth }]}> 
           <Image
             source={avatarSource}
             style={[styles.profileAvatar, { borderRadius: colors.radius.pill, borderColor: colors.glassBorder }]}
@@ -198,7 +195,7 @@ export const ChatSettingsScreen = ({ route, navigation }: any) => {
         </BlurView>
 
         {/* Settings Menu Items */}
-        <BlurView intensity={colors.glassBlur} tint={isDark ? 'dark' : 'light'} style={[styles.section, { borderColor: colors.glassBorder }]}> 
+        <BlurView intensity={colors.glassBlur} tint={isDark ? 'dark' : 'light'} style={[styles.section, { borderColor: colors.glassBorder, borderWidth: colors.borderWidth }]}> 
           <SettingItem
             icon={<Bell size={20} color={colors.text} />}
             label="Notifications"
@@ -208,7 +205,7 @@ export const ChatSettingsScreen = ({ route, navigation }: any) => {
           />
         </BlurView>
 
-        <BlurView intensity={colors.glassBlur} tint={isDark ? 'dark' : 'light'} style={[styles.section, { borderColor: colors.glassBorder }]}> 
+        <BlurView intensity={colors.glassBlur} tint={isDark ? 'dark' : 'light'} style={[styles.section, { borderColor: colors.glassBorder, borderWidth: colors.borderWidth }]}> 
           <View style={styles.menuItem}>
             <Palette size={20} color={colors.text} />
             <Text style={[styles.menuLabel, { color: colors.text }]}>Chat Background</Text>
@@ -252,7 +249,7 @@ export const ChatSettingsScreen = ({ route, navigation }: any) => {
                   return (
                     <TouchableOpacity
                       key={opacity}
-                      style={[styles.opacityPill, { borderColor: isSelected ? colors.primary : colors.glassBorder, backgroundColor: isSelected ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.06)' }]}
+                      style={[styles.opacityPill, { borderColor: isSelected ? colors.primary : colors.glassBorder, backgroundColor: isSelected ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.12)' }]}
                       onPress={() => handleOpacityChange(opacity)}
                     >
                       <Text style={[styles.opacityText, { color: isSelected ? colors.text : colors.gray }]}>{Math.round(opacity * 100)}%</Text>
@@ -264,12 +261,12 @@ export const ChatSettingsScreen = ({ route, navigation }: any) => {
           )}
         </BlurView>
 
-        <BlurView intensity={colors.glassBlur} tint={isDark ? 'dark' : 'light'} style={[styles.section, { borderColor: colors.glassBorder }]}> 
+        <BlurView intensity={colors.glassBlur} tint={isDark ? 'dark' : 'light'} style={[styles.section, { borderColor: colors.glassBorder, borderWidth: colors.borderWidth }]}> 
           <View style={styles.menuItem}>
-            <MessageSquare size={20} color={colors.text} />
+            <MessagesSquare size={20} color={colors.text} />
             <Text style={[styles.menuLabel, { color: colors.text }]}>Media, Links &amp; Docs</Text>
           </View>
-          <View style={[styles.mediaCount, { backgroundColor: 'rgba(255,255,255,0.07)', borderColor: colors.glassBorder }]}> 
+          <View style={[styles.mediaCount, { backgroundColor: 'rgba(255,255,255,0.16)', borderColor: colors.glassBorder }]}> 
             <View style={styles.mediaCountItem}>
               <ImageIcon size={16} color={colors.gray} />
               <Text style={[styles.mediaLabel, { color: colors.gray }]}>Photos &amp; Videos</Text>
@@ -281,14 +278,14 @@ export const ChatSettingsScreen = ({ route, navigation }: any) => {
               <Text style={[styles.mediaValue, { color: colors.text }]}>{contentCounts.linkCount}</Text>
             </View>
             <View style={styles.mediaCountItem}>
-              <MessageSquare size={16} color={colors.gray} />
+              <MessagesSquare size={16} color={colors.gray} />
               <Text style={[styles.mediaLabel, { color: colors.gray }]}>Docs</Text>
               <Text style={[styles.mediaValue, { color: colors.text }]}>{contentCounts.docsCount}</Text>
             </View>
           </View>
         </BlurView>
 
-        <BlurView intensity={colors.glassBlur} tint={isDark ? 'dark' : 'light'} style={[styles.section, { borderColor: colors.glassBorder }]}> 
+        <BlurView intensity={colors.glassBlur} tint={isDark ? 'dark' : 'light'} style={[styles.section, { borderColor: colors.glassBorder, borderWidth: colors.borderWidth }]}> 
           <TouchableOpacity style={styles.menuItem} onPress={handleClearChat}>
             <Eraser size={20} color={colors.text} />
             <Text style={[styles.menuLabel, { color: colors.text }]}>Clear Chat</Text>
@@ -324,20 +321,19 @@ function SettingItem({ icon, label, value, onPress, isLast }: {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  glowBall: { position: 'absolute', borderRadius: 180, overflow: 'hidden' },
   headerBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 12, justifyContent: 'space-between', backgroundColor: 'rgba(255,255,255,0.08)', overflow: 'hidden' },
-  backBtn: { width: 40, height: 40, borderRadius: 18, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.08)', borderWidth: StyleSheet.hairlineWidth },
+  backBtn: { width: 40, height: 40, borderRadius: 18, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.1)', borderWidth: 0.5 },
   headerTitle: { fontSize: 20, fontWeight: '700' },
   scrollArea: { paddingHorizontal: 16, paddingTop: 20 },
 
   // Profile header
-  profileHeader: { alignItems: 'center', marginBottom: 24, paddingVertical: 24, borderRadius: 30, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, backgroundColor: 'rgba(255,255,255,0.08)', shadowColor: '#B94CFF', shadowOffset: { width: 0, height: 14 }, shadowOpacity: 0.22, shadowRadius: 26, elevation: 5 },
+  profileHeader: { alignItems: 'center', marginBottom: 24, paddingVertical: 24, borderRadius: 30, overflow: 'hidden', backgroundColor: 'rgba(255,255,255,0.1)', shadowColor: '#E9C7FF', shadowOffset: { width: 0, height: 16 }, shadowOpacity: 0.24, shadowRadius: 30, elevation: 7 },
   profileAvatar: { width: 88, height: 88, marginBottom: 12, borderWidth: StyleSheet.hairlineWidth },
   profileName: { fontSize: 22, fontWeight: '700' },
   profileStatus: { fontSize: 14, marginTop: 4 },
 
   // Sections
-  section: { marginBottom: 18, borderRadius: 24, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, backgroundColor: 'rgba(255,255,255,0.075)', shadowColor: '#000', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.18, shadowRadius: 22, elevation: 4 },
+  section: { marginBottom: 18, borderRadius: 24, overflow: 'hidden', backgroundColor: 'rgba(255,255,255,0.08)', shadowColor: '#E9C7FF', shadowOffset: { width: 0, height: 14 }, shadowOpacity: 0.2, shadowRadius: 26, elevation: 6 },
   menuItem: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: 'rgba(255,255,255,0.06)' },
   menuLabel: { flex: 1, fontSize: 16, fontWeight: '500', marginLeft: 14 },
   settingValue: { fontSize: 14, color: 'rgba(255,255,255,0.5)' },
@@ -349,15 +345,15 @@ const styles = StyleSheet.create({
   mediaLabel: { flex: 1, fontSize: 15, marginLeft: 14 },
   mediaValue: { fontSize: 15 },
   backgroundGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, padding: 12 },
-  backgroundOption: { width: '30%', minWidth: 88, borderRadius: 18, padding: 6, borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)', backgroundColor: 'rgba(255,255,255,0.06)' },
+  backgroundOption: { width: '30%', minWidth: 88, borderRadius: 18, padding: 6, borderWidth: 1, borderColor: 'rgba(255,255,255,0.28)', backgroundColor: 'rgba(255,255,255,0.14)' },
   backgroundPreview: { height: 64, borderRadius: 14, marginBottom: 8 },
   backgroundName: { fontSize: 11, fontWeight: '600', textAlign: 'center' },
   customBackgroundArea: { flexDirection: 'row', gap: 10, paddingHorizontal: 12, paddingBottom: 12 },
-  uploadButton: { flex: 1, minHeight: 46, borderRadius: 18, borderWidth: StyleSheet.hairlineWidth, backgroundColor: 'rgba(255,255,255,0.08)', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 10 },
+  uploadButton: { flex: 1, minHeight: 46, borderRadius: 18, borderWidth: 1, backgroundColor: 'rgba(255,255,255,0.16)', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 10 },
   uploadText: { fontSize: 13, fontWeight: '700' },
   opacityArea: { paddingHorizontal: 12, paddingBottom: 14 },
   opacityLabel: { fontSize: 12, fontWeight: '700', textTransform: 'uppercase', marginBottom: 8 },
   opacityControls: { flexDirection: 'row', gap: 8 },
-  opacityPill: { flex: 1, height: 36, borderRadius: 18, borderWidth: StyleSheet.hairlineWidth, alignItems: 'center', justifyContent: 'center' },
+  opacityPill: { flex: 1, height: 36, borderRadius: 18, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   opacityText: { fontSize: 12, fontWeight: '700' },
 });

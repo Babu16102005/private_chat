@@ -3,6 +3,97 @@ import { handleError } from '../utils/errorHandler';
 import { ChatBackgroundSettings, defaultChatBackgroundId, defaultChatBackgroundSettings, normalizeBackgroundOpacity } from '../utils/chatBackground';
 import { getUploadContentType, getUploadExtension, normalizeUploadBody } from '../utils/mediaUpload';
 
+type PushNotificationPayload = {
+  recipientId: string;
+  type: 'message' | 'call';
+  title: string;
+  body: string;
+  data?: Record<string, any>;
+};
+
+const getPairRecipientId = async (pairId: string, senderId: string) => {
+  const { data, error } = await supabase
+    .from('pairs')
+    .select('user_a_id, user_b_id')
+    .eq('id', pairId)
+    .maybeSingle();
+
+  if (error || !data) return null;
+  return data.user_a_id === senderId ? data.user_b_id : data.user_a_id;
+};
+
+const getNotificationSenderName = async (userId: string, fallbackEmail?: string | null) => {
+  const profile = await profileService.getProfile(userId);
+  return profile?.name || fallbackEmail?.split('@')[0] || 'Kiba';
+};
+
+const sendPushNotification = async (payload: PushNotificationPayload) => {
+  try {
+    const { error } = await supabase.functions.invoke('send-push-notification', {
+      body: payload,
+    });
+
+    if (error) {
+      console.warn('Push notification request failed:', error.message);
+    }
+  } catch (error) {
+    console.warn('Push notification request failed:', error);
+  }
+};
+
+const buildMessageNotificationBody = (content: string, messageType: string) => {
+  if (messageType === 'image') return 'Sent you a photo';
+  if (messageType === 'video') return 'Sent you a video';
+  if (messageType === 'audio' || messageType === 'voice') return 'Sent you a voice message';
+  return content || 'Sent you a message';
+};
+
+export const notificationService = {
+  async sendMessagePush(pairId: string, message: any) {
+    const user = await authService.getCurrentUser();
+    if (!user) return;
+
+    const recipientId = await getPairRecipientId(pairId, user.id);
+    if (!recipientId) return;
+
+    const senderName = await getNotificationSenderName(user.id, user.email);
+    const messageType = message.message_type || 'text';
+
+    await sendPushNotification({
+      recipientId,
+      type: 'message',
+      title: senderName,
+      body: buildMessageNotificationBody(message.content || '', messageType),
+      data: {
+        pairId,
+        messageId: message.id,
+        senderId: user.id,
+      },
+    });
+  },
+
+  async sendCallPush(pairId: string, recipientId: string, isVideo: boolean) {
+    const user = await authService.getCurrentUser();
+    if (!user) return;
+
+    const senderName = await getNotificationSenderName(user.id, user.email);
+    const callType = isVideo ? 'video' : 'audio';
+
+    await sendPushNotification({
+      recipientId,
+      type: 'call',
+      title: `${senderName} is calling`,
+      body: `Incoming ${callType} call`,
+      data: {
+        pairId,
+        callerId: user.id,
+        callerName: senderName,
+        isVideo,
+      },
+    });
+  },
+};
+
 // Authentication Services
 export const authService = {
   async signUp(email: string, password: string) {
@@ -241,6 +332,26 @@ export const inviteService = {
      const pairs = await this.getMyPairs();
      return pairs[0] || null;
   },
+
+  async getPairById(pairId: string) {
+    try {
+      const user = await authService.getCurrentUser();
+      if (!user) return null;
+
+      const { data, error } = await supabase
+        .from('pairs')
+        .select(`*, user_a:users!pairs_user_a_id_fkey(*), user_b:users!pairs_user_b_id_fkey(*)`)
+        .eq('id', pairId)
+        .or(`user_a_id.eq.${user.id},user_b_id.eq.${user.id}`)
+        .maybeSingle();
+
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('getPairById error:', error);
+      return null;
+    }
+  },
   
   subscribeToInvites(callback: (invite: any) => void) {
     return supabase
@@ -276,6 +387,7 @@ export const messageService = {
       if (replyToMessageId) payload.reply_to_message_id = replyToMessageId;
       const { data, error } = await supabase.from('messages').insert(payload).select().single();
       if (error) throw error;
+      notificationService.sendMessagePush(pairId, data);
       return data;
     } catch (error) { throw error; }
   },

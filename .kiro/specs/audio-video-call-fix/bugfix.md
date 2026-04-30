@@ -2,7 +2,7 @@
 
 ## Introduction
 
-The CoupleChat app's audio/video calling and audio messaging features are non-functional. Users cannot make audio calls, video calls, or send voice messages. The app uses WebRTC (react-native-webrtc v124.0.7) for calls with Supabase realtime signaling, and expo-audio v1.1.1 for voice messages. The implementation exists but fails at runtime due to missing permissions handling, incorrect module imports, and race conditions in the signaling flow.
+The kiba app's audio/video calling and audio messaging features are non-functional. Users cannot make audio calls, video calls, or send voice messages. The app uses WebRTC (react-native-webrtc v124.0.7) for calls with Supabase realtime signaling, and expo-audio v1.1.1 for voice messages. The implementation exists but fails at runtime due to missing permissions handling, incorrect module imports, and race conditions in the signaling flow.
 
 ## Bug Analysis
 

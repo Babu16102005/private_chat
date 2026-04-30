@@ -7,32 +7,44 @@ import { ThemeProvider } from './src/context/ThemeContext';
 import { AppNavigator } from './src/navigation/AppNavigator';
 import { CallProvider } from './src/context/CallContext';
 import { CallScreen } from './src/screens/CallScreen';
+import { navigationRef } from './src/navigation/navigationRef';
+import { usePushNotifications } from './src/hooks/usePushNotifications';
 
 const prefix = Linking.createURL('/');
 
-export default function App() {
-  const linking = {
-    prefixes: [prefix, 'chatapp://'],
-    config: {
-      screens: {
-        Invite: {
-          path: 'accept',
-          parse: {
-            token: (token: string) => ({ token }),
-          },
+const AppContent = () => {
+  usePushNotifications();
+
+  return (
+    <>
+      <NavigationContainer ref={navigationRef} linking={linking}>
+        <AppNavigator />
+      </NavigationContainer>
+      <CallScreen />
+    </>
+  );
+};
+
+const linking = {
+  prefixes: [prefix, 'chatapp://'],
+  config: {
+    screens: {
+      Invite: {
+        path: 'accept',
+        parse: {
+          token: (token: string) => ({ token }),
         },
       },
     },
-  };
+  },
+};
 
+export default function App() {
   return (
     <ThemeProvider>
       <AuthProvider>
         <CallProvider>
-          <NavigationContainer linking={linking}>
-            <AppNavigator />
-          </NavigationContainer>
-          <CallScreen />
+          <AppContent />
         </CallProvider>
       </AuthProvider>
     </ThemeProvider>

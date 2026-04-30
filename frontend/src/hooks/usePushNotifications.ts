@@ -4,7 +4,17 @@ import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { useAuth } from '../context/AuthContext';
-import { profileService } from '../services/supabaseService';
+import { inviteService, profileService } from '../services/supabaseService';
+import { navigate } from '../navigation/navigationRef';
+
+type NotificationData = {
+  type?: string;
+  pairId?: string;
+  senderId?: string;
+  callerId?: string;
+  callerName?: string;
+  isVideo?: boolean;
+};
 
 // Configure how notifications should be handled when app is in foreground
 Notifications.setNotificationHandler({
@@ -22,6 +32,7 @@ export const usePushNotifications = () => {
   const [expoPushToken, setExpoPushToken] = useState<string | undefined>('');
   const responseListener = useRef<Notifications.Subscription>(null!);
   const notificationListener = useRef<Notifications.Subscription>(null!);
+  const handledNotificationIdRef = useRef<string | null>(null);
 
   // Memoize isExpoGo and add safety checks
   const isExpoGo = useMemo(() => {
@@ -51,13 +62,16 @@ export const usePushNotifications = () => {
           profileService.updateProfile(user.id, { push_token: token });
         }
 
-        notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
-          // Logic for foreground notification
-        });
+        notificationListener.current = Notifications.addNotificationReceivedListener(() => {});
 
         responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
-          // Logic for tapped notification
+          handleNotificationResponse(response, handledNotificationIdRef);
         });
+
+        const lastResponse = await Notifications.getLastNotificationResponseAsync();
+        if (lastResponse) {
+          handleNotificationResponse(lastResponse, handledNotificationIdRef);
+        }
       } catch (error) {
         console.warn('[PushNotifications] Error during setup:', error);
       }
@@ -76,6 +90,38 @@ export const usePushNotifications = () => {
   }, [user, isExpoGo]);
 
   return { expoPushToken };
+};
+
+const handleNotificationResponse = async (
+  response: Notifications.NotificationResponse,
+  handledNotificationIdRef: { current: string | null }
+) => {
+  const notificationId = response.notification.request.identifier;
+  if (handledNotificationIdRef.current === notificationId) return;
+  handledNotificationIdRef.current = notificationId;
+
+  const data = response.notification.request.content.data as NotificationData;
+  const pairId = data?.pairId;
+
+  if (!pairId) return;
+
+  try {
+    const pair = await inviteService.getPairById(pairId);
+    if (!pair) {
+      navigate('Home', undefined);
+      return;
+    }
+
+    const senderId = data.senderId || data.callerId;
+    const partner = senderId
+      ? senderId === pair.user_a_id ? pair.user_a : pair.user_b
+      : pair.user_a || pair.user_b;
+
+    navigate('Chat', { pairId, partner });
+  } catch (error) {
+    console.warn('[PushNotifications] Failed to open notification target:', error);
+    navigate('Home', undefined);
+  }
 };
 
 async function registerForPushNotificationsAsync(isExpoGo: boolean) {
@@ -104,7 +150,8 @@ async function registerForPushNotificationsAsync(isExpoGo: boolean) {
     
     // Safety check for getExpoPushTokenAsync as it can still throw in some edge cases
     try {
-      token = (await Notifications.getExpoPushTokenAsync()).data;
+      const projectId = Constants.expoConfig?.extra?.eas?.projectId || Constants.easConfig?.projectId;
+      token = (await Notifications.getExpoPushTokenAsync(projectId ? { projectId } : undefined)).data;
     } catch (e) {
       console.warn('[PushNotifications] getExpoPushTokenAsync failed:', e);
       return undefined;

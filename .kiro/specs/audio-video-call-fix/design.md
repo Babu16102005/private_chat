@@ -2,7 +2,7 @@
 
 ## Overview
 
-The CoupleChat app's WebRTC-based calling and expo-audio voice messaging features are non-functional due to missing permissions handling, race conditions in signaling flow, and incomplete state validation. This fix will implement proper permission requests before media access, queue ICE candidates to prevent race conditions, validate recorder state before operations, and ensure complete cleanup on call termination. The approach is minimal and surgical, targeting only the defective code paths while preserving all existing chat, UI, and theme functionality.
+The kiba app's WebRTC-based calling and expo-audio voice messaging features are non-functional due to missing permissions handling, race conditions in signaling flow, and incomplete state validation. This fix will implement proper permission requests before media access, queue ICE candidates to prevent race conditions, validate recorder state before operations, and ensure complete cleanup on call termination. The approach is minimal and surgical, targeting only the defective code paths while preserving all existing chat, UI, and theme functionality.
 
 ## Glossary
 

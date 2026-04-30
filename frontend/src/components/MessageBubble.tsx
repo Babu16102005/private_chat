@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, memo } from 'react';
 import { View, Text, TouchableOpacity, Image, Alert, StyleSheet, Platform, Linking } from 'react-native';
 import { Check, CheckCheck, Play, Pause, Reply } from 'lucide-react-native';
 import { Audio } from 'expo-av';
+import { LinearGradient } from 'expo-linear-gradient';
 import { File, Paths } from 'expo-file-system';
 import { useTheme } from '../context/ThemeContext';
 import { formatMessageTime } from '../utils/date';
@@ -301,10 +302,16 @@ export const MessageBubble: React.FC<MessageBubbleProps> = memo(
               borderBottomRightRadius: isMe ? 8 : 22,
               borderBottomLeftRadius: isMe ? 22 : 8,
               borderColor: colors.glassBorder,
-              borderWidth: colors.borderWidth > 0 ? colors.borderWidth : StyleSheet.hairlineWidth,
+              borderWidth: colors.borderWidth,
             },
           ]}
         >
+          <LinearGradient 
+            colors={isMe 
+              ? ['rgba(255,255,255,0.14)', 'rgba(255,255,255,0.06)'] as any 
+              : ['rgba(255,255,255,0.08)', 'rgba(255,255,255,0.02)'] as any} 
+            style={StyleSheet.absoluteFill} 
+          />
           {/* Quoted/Reply message */}
           {renderQuotedMessage()}
 
@@ -335,7 +342,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = memo(
               <TouchableOpacity
                 activeOpacity={0.7}
                 onPress={handleAudioTap}
-                style={[styles.audioBubble, { borderColor: isMe ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.15)' }]}
+                style={[styles.audioBubble, { borderColor: colors.glassBorder }]}
               >
                 <View style={[styles.playBtn, { backgroundColor: isMe ? colors.primary : 'rgba(255,255,255,0.2)' }]}>
                   {isPlaying ? (
@@ -396,13 +403,9 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     ...Platform.select({
       ios: {
-        shadowColor: '#B94CFF',
-        shadowOffset: { width: 0, height: 10 },
-        shadowOpacity: 0.18,
         shadowRadius: 20,
       },
       android: {
-        elevation: 5,
       },
     }),
   },
@@ -499,8 +502,8 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.15)',
+    borderWidth: 0.5,
+    borderColor: 'rgba(255,255,255,0.2)',
     minWidth: 160,
   },
   playBtn: {
@@ -519,7 +522,7 @@ const styles = StyleSheet.create({
   audioProgressTrack: {
     height: 3,
     borderRadius: 1.5,
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    backgroundColor: 'rgba(255,255,255,0.24)',
   },
   audioProgressFill: {
     height: 3,
@@ -538,7 +541,6 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     paddingRight: 8,
     borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.06)',
   },
   quoteTopRow: {
     flexDirection: 'row',

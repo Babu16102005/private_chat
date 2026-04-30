@@ -1,6 +1,8 @@
 import React from 'react';
-import { View, ActivityIndicator, StyleSheet, Text } from 'react-native';
+import { View, ActivityIndicator, StyleSheet, Text, Image } from 'react-native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { LinearGradient } from 'expo-linear-gradient';
+
 import { useAuth } from '../context/AuthContext';
 import { LoginScreen } from '../screens/LoginScreen';
 import { SignupScreen } from '../screens/SignupScreen';
@@ -11,18 +13,20 @@ import { InviteScreen } from '../screens/InviteScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
 import { ChatSettingsScreen } from '../screens/ChatSettingsScreen';
 import { RootStackParamList } from './types';
-
 import { useTheme } from '../context/ThemeContext';
-import { LinearGradient } from 'expo-linear-gradient';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
+const logoSource = require('../../assets/kiba-entry.png');
 
 const LoadingScreen = () => {
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
   return (
-    <View style={[styles.loading, { backgroundColor: colors.background }]}>
-      <LinearGradient colors={['rgba(210, 118, 25, 0.2)', 'transparent'] as any} style={{ position: 'absolute', top: -100, right: -50, width: 350, height: 350, borderRadius: 175 }} />
-      <ActivityIndicator size="large" color={colors.primary} />
+    <View style={[styles.loading, { backgroundColor: colors.background }]}> 
+      <LinearGradient colors={colors.gradientPrimary as [string, string, ...string[]]} start={{ x: 0.08, y: 0 }} end={{ x: 0.95, y: 1 }} style={StyleSheet.absoluteFill} />
+      <LinearGradient colors={['rgba(100,243,255,0.12)', 'rgba(233,199,255,0.07)', 'transparent']} start={{ x: 1, y: 0 }} end={{ x: 0.16, y: 0.76 }} style={StyleSheet.absoluteFill} />
+      <LinearGradient colors={['transparent', 'rgba(141,255,213,0.08)', 'rgba(5,7,18,0.22)']} start={{ x: 0, y: 0.24 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+      <Image source={logoSource} style={styles.logo} resizeMode="contain" />
+      <ActivityIndicator size="large" color={colors.primary} style={styles.indicator} />
       <Text style={[styles.loadingText, { color: colors.text }]}>Preparing your space...</Text>
     </View>
   );
@@ -34,8 +38,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center', 
     alignItems: 'center',
   },
+  logo: {
+    width: 180,
+    height: 180,
+  },
+  indicator: {
+    marginTop: 28,
+  },
   loadingText: {
-    marginTop: 20,
+    marginTop: 18,
     fontSize: 16,
     fontWeight: '700',
     letterSpacing: 0.5

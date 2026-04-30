@@ -21,7 +21,7 @@ export const formatChatListTime = (dateString: string): string => {
   yesterday.setDate(today.getDate() - 1);
 
   if (date.toDateString() === today.toDateString()) {
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
   }
   if (date.toDateString() === yesterday.toDateString()) return 'Yesterday';
   return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
@@ -32,5 +32,5 @@ export const getDateKey = (dateString: string): string => {
 };
 
 export const formatMessageTime = (dateString: string): string => {
-  return new Date(dateString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+  return new Date(dateString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
 };

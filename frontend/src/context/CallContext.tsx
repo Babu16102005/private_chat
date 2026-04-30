@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useRef, useCallb
 import { Platform, Alert, PermissionsAndroid } from 'react-native';
 import Constants from 'expo-constants';
 import { supabase } from '../services/supabase';
+import { notificationService } from '../services/supabaseService';
 import { useAuth } from './AuthContext';
 import { configureCallAudioMode, restoreDefaultAudioMode, startCallTone, stopCallTone } from '../utils/callAudio';
 import { buildCallSignalPayload, getCallSignalType, getCallTargetId } from '../utils/callSignaling';
@@ -503,6 +504,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         pairId,
         isVideo,
       });
+      notificationService.sendCallPush(pairId, targetUserId, isVideo);
       startCallTone('ringback');
     } catch (error: any) {
       console.error('Call start failed:', error);

@@ -4,7 +4,7 @@
 
  ## Project Snapshot
 
- - App name: `CoupleChat`
+- App name: `kiba`
  - Stack: React Native + Expo 54 + TypeScript + Supabase + React Navigation + WebRTC
  - Main app folder: `frontend`
  - Backend logic lives mostly in Supabase and `frontend/src/services/supabaseService.ts`

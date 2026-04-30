@@ -1,16 +1,16 @@
 {
   "expo": {
-    "name": "kiba",
-    "slug": "couplechat",
+    "name": "Kiba",
+    "slug": "Kiba",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/kibabg.png",
     "scheme": "chatapp",
     "userInterfaceStyle": "light",
     "splash": {
-      "image": "./assets/splash.png",
+      "image": "./assets/kiba-entry.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#05000D"
     },
     "assetBundlePatterns": [
       "**/*"
@@ -28,7 +28,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./assets/kibabg.png",
         "backgroundColor": "#ffffff"
       },
       "package": "com.chatapplication.app",
@@ -60,7 +60,7 @@
       "runtimeVersion": "1.0.0"
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/kibabg.png"
     },
     "plugins": [
       "expo-video",
@@ -74,13 +74,11 @@
       "expo-audio",
       "expo-asset"
     ],
+    "owner": "babu_b",
     "extra": {
       "eas": {
-        "projectId": "b8f312e9-72ea-452a-95f4-93514e3e237b"
+        "projectId": "b1944efe-bfdd-404f-8579-4a80b41bf61d"
       }
-    },
-    "updates": {
-      "url": "https://u.expo.dev/b8f312e9-72ea-452a-95f4-93514e3e237b"
     }
   }
 }

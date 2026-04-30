@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, KeyboardAvoidingView, ScrollView, Platform, Dimensions } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, KeyboardAvoidingView, ScrollView, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
@@ -7,8 +7,6 @@ import { User, Mail, Lock, UserPlus, ChevronLeft } from 'lucide-react-native';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { handleError } from '../utils/errorHandler';
-
-const { height } = Dimensions.get('window');
 
 export const SignupScreen = ({ navigation }: any) => {
   const [name, setName] = useState('');
@@ -35,17 +33,17 @@ export const SignupScreen = ({ navigation }: any) => {
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.container}>
       <View style={[styles.inner, { backgroundColor: colors.background }]}> 
         <View style={StyleSheet.absoluteFill}>
-          <LinearGradient colors={colors.gradientPrimary as any} style={StyleSheet.absoluteFill} />
-          <LinearGradient colors={['rgba(185, 76, 255, 0.46)', 'transparent'] as any} style={[styles.glowBall, { top: -130, right: -90, width: 360, height: 360 }]} />
-          <LinearGradient colors={['rgba(37, 214, 255, 0.22)', 'transparent'] as any} style={[styles.glowBall, { top: height * 0.38, left: -140, width: 320, height: 320 }]} />
-          <LinearGradient colors={['rgba(255, 122, 92, 0.18)', 'transparent'] as any} style={[styles.glowBall, { bottom: -90, right: -80, width: 280, height: 280 }]} />
+          <LinearGradient colors={colors.gradientPrimary as any} start={{ x: 0.12, y: 0 }} end={{ x: 0.92, y: 1 }} style={StyleSheet.absoluteFill} />
+          <LinearGradient colors={['rgba(100,243,255,0.12)', 'rgba(233,199,255,0.07)', 'transparent'] as any} start={{ x: 1, y: 0 }} end={{ x: 0.2, y: 0.78 }} style={StyleSheet.absoluteFill} />
+          <LinearGradient colors={['transparent', 'rgba(141,255,213,0.08)', 'rgba(5,7,18,0.22)'] as any} start={{ x: 0, y: 0.28 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
         </View>
         <ScrollView contentContainerStyle={styles.scrollArea} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
           <TouchableOpacity onPress={() => navigation.goBack()} style={[styles.backBtn, { borderColor: colors.glassBorder }]}> 
             <ChevronLeft size={28} color={colors.text} />
           </TouchableOpacity>
 
-          <BlurView intensity={colors.glassBlur} tint={isDark ? 'dark' : 'light'} style={[styles.authPanel, { borderColor: colors.glassBorder }]}> 
+          <BlurView intensity={colors.glassBlur + 14} tint={isDark ? 'dark' : 'light'} style={[styles.authPanel, { borderColor: colors.glassBorder, borderWidth: colors.borderWidth }]}> 
+            <LinearGradient colors={['rgba(255,255,255,0.14)', 'rgba(255,255,255,0.04)'] as any} style={StyleSheet.absoluteFill} />
             <View style={styles.topSection}>
               <Text style={[styles.brandText, { color: colors.primary }]}>kiba</Text>
               <Text style={[styles.title, { color: colors.text }]}>Create account</Text>
@@ -53,7 +51,7 @@ export const SignupScreen = ({ navigation }: any) => {
             </View>
 
             <View style={styles.form}>
-            <BlurView intensity={colors.glassBlur + 8} tint={isDark ? 'dark' : 'light'} style={[styles.inputWrap, { backgroundColor: 'rgba(255,255,255,0.1)', borderColor: colors.glassBorder, borderRadius: 22 }]}> 
+            <BlurView intensity={colors.glassBlur + 18} tint={isDark ? 'dark' : 'light'} style={[styles.inputWrap, { backgroundColor: 'rgba(255,255,255,0.08)', borderColor: colors.glassBorder, borderRadius: 22, borderWidth: colors.borderWidth }]}> 
               <User size={20} color={colors.gray} style={{ marginRight: 12 }} />
               <TextInput
                 style={[styles.input, { color: colors.text }]}
@@ -64,7 +62,7 @@ export const SignupScreen = ({ navigation }: any) => {
               />
             </BlurView>
 
-            <BlurView intensity={colors.glassBlur + 8} tint={isDark ? 'dark' : 'light'} style={[styles.inputWrap, { backgroundColor: 'rgba(255,255,255,0.1)', borderColor: colors.glassBorder, borderRadius: 22 }]}> 
+            <BlurView intensity={colors.glassBlur + 18} tint={isDark ? 'dark' : 'light'} style={[styles.inputWrap, { backgroundColor: 'rgba(255,255,255,0.08)', borderColor: colors.glassBorder, borderRadius: 22, borderWidth: colors.borderWidth }]}> 
               <Mail size={20} color={colors.gray} style={{ marginRight: 12 }} />
               <TextInput
                 style={[styles.input, { color: colors.text }]}
@@ -77,7 +75,7 @@ export const SignupScreen = ({ navigation }: any) => {
               />
             </BlurView>
 
-            <BlurView intensity={colors.glassBlur + 8} tint={isDark ? 'dark' : 'light'} style={[styles.inputWrap, { backgroundColor: 'rgba(255,255,255,0.1)', borderColor: colors.glassBorder, borderRadius: 22 }]}> 
+            <BlurView intensity={colors.glassBlur + 18} tint={isDark ? 'dark' : 'light'} style={[styles.inputWrap, { backgroundColor: 'rgba(255,255,255,0.08)', borderColor: colors.glassBorder, borderRadius: 22, borderWidth: colors.borderWidth }]}> 
               <Lock size={20} color={colors.gray} style={{ marginRight: 12 }} />
               <TextInput
                 style={[styles.input, { color: colors.text }]}
@@ -118,18 +116,17 @@ export const SignupScreen = ({ navigation }: any) => {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   inner: { flex: 1 },
-  glowBall: { position: 'absolute', borderRadius: 180, overflow: 'hidden' },
   scrollArea: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: 24, paddingTop: 80, paddingBottom: 40 },
-  authPanel: { borderRadius: 32, padding: 24, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, backgroundColor: 'rgba(255,255,255,0.08)', shadowColor: '#B94CFF', shadowOffset: { width: 0, height: 18 }, shadowOpacity: 0.28, shadowRadius: 30, elevation: 8 },
-  backBtn: { position: 'absolute', top: 16, left: 16, width: 40, height: 40, borderRadius: 18, justifyContent: 'center', alignItems: 'center', zIndex: 10, backgroundColor: 'rgba(255,255,255,0.08)', borderWidth: StyleSheet.hairlineWidth },
+  authPanel: { borderRadius: 34, padding: 24, overflow: 'hidden', backgroundColor: 'rgba(255,255,255,0.1)', shadowColor: '#E9C7FF', shadowOffset: { width: 0, height: 28 }, shadowOpacity: 0.28, shadowRadius: 44, elevation: 14 },
+  backBtn: { position: 'absolute', top: 16, left: 16, width: 40, height: 40, borderRadius: 18, justifyContent: 'center', alignItems: 'center', zIndex: 10, backgroundColor: 'rgba(255,255,255,0.1)', borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.2)' },
   topSection: { marginBottom: 32 },
   brandText: { fontSize: 14, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 2, marginBottom: 24 },
   title: { fontSize: 34, fontWeight: '800', marginBottom: 8 },
   subtitle: { fontSize: 16, fontWeight: '400' },
   form: { gap: 14 },
-  inputWrap: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, height: 56, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth },
+  inputWrap: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, height: 56, overflow: 'hidden', shadowColor: '#64F3FF', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.22, shadowRadius: 22, elevation: 6 },
   input: { flex: 1, fontSize: 16 },
-  signUpBtn: { height: 56, overflow: 'hidden', marginTop: 8, borderWidth: 1, backgroundColor: 'rgba(255,255,255,0.14)', shadowColor: '#D946EF', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.34, shadowRadius: 22, elevation: 7 },
+  signUpBtn: { height: 56, overflow: 'hidden', marginTop: 8, borderWidth: 0.5, backgroundColor: 'rgba(255,255,255,0.15)', shadowColor: '#E9C7FF', shadowOffset: { width: 0, height: 14 }, shadowOpacity: 0.3, shadowRadius: 26, elevation: 9 },
   signUpGrad: { flex: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'center' },
   buttonShine: { position: 'absolute', top: 1, left: 8, right: 8, height: 20, borderRadius: 999, opacity: 0.34 },
   btnText: { color: '#FFFFFF', fontWeight: '700', fontSize: 16 },
