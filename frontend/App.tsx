@@ -7,6 +7,8 @@ import { ThemeProvider } from './src/context/ThemeContext';
 import { AppNavigator } from './src/navigation/AppNavigator';
 import { CallProvider } from './src/context/CallContext';
 import { CallScreen } from './src/screens/CallScreen';
+import { LockProvider } from './src/context/LockContext';
+import { PinLockOverlay } from './src/components/PinLockOverlay';
 import { navigationRef } from './src/navigation/navigationRef';
 import { usePushNotifications } from './src/hooks/usePushNotifications';
 
@@ -21,6 +23,7 @@ const AppContent = () => {
         <AppNavigator />
       </NavigationContainer>
       <CallScreen />
+      <PinLockOverlay />
     </>
   );
 };
@@ -44,7 +47,9 @@ export default function App() {
     <ThemeProvider>
       <AuthProvider>
         <CallProvider>
-          <AppContent />
+          <LockProvider>
+            <AppContent />
+          </LockProvider>
         </CallProvider>
       </AuthProvider>
     </ThemeProvider>

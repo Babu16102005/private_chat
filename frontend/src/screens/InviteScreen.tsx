@@ -86,7 +86,7 @@ export const InviteScreen = () => {
       </BlurView>
 
       <View style={styles.content}>
-        <BlurView intensity={colors.glassBlur + 16} tint="dark" style={[styles.glassPanel, { borderColor: colors.glassBorder, borderWidth: colors.borderWidth }]}> 
+        <BlurView intensity={colors.glassBlur + 16} tint={isDark ? 'dark' : 'light'} style={[styles.glassPanel, { borderColor: colors.glassBorder, borderWidth: colors.borderWidth }]}> 
           <LinearGradient colors={['rgba(255,255,255,0.14)', 'rgba(255,255,255,0.04)'] as any} style={StyleSheet.absoluteFill} />
           <View style={styles.frostFill} />
           <View style={styles.iconWrap}>
@@ -100,7 +100,7 @@ export const InviteScreen = () => {
             Send an invite to your partner with their email address. Once they accept, you&apos;ll be connected in a private chat.
           </Text>
 
-        <BlurView intensity={colors.glassBlur + 18} tint="dark" style={[styles.inputWrap, { backgroundColor: 'rgba(255,255,255,0.08)', borderColor: colors.glassBorder, borderRadius: 24, borderWidth: colors.borderWidth }]}> 
+        <BlurView intensity={colors.glassBlur + 18} tint={isDark ? 'dark' : 'light'} style={[styles.inputWrap, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.03)', borderColor: colors.glassBorder, borderRadius: 24, borderWidth: colors.borderWidth }]}> 
           <Mail size={20} color={colors.gray} style={{ marginRight: 12 }} />
           <TextInput
             style={[styles.input, { color: colors.text }]}
@@ -135,19 +135,19 @@ export const InviteScreen = () => {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 60, paddingBottom: 12, backgroundColor: 'rgba(255,255,255,0.08)', overflow: 'hidden' },
+  topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 60, paddingBottom: 12, overflow: 'hidden' },
   backBtn: { width: 40, height: 40, borderRadius: 18, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.1)', borderWidth: 0.5 },
   topBarTitle: { fontSize: 20, fontWeight: '700' },
   content: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 24, gap: 20 },
-  glassPanel: { width: '100%', borderRadius: 36, padding: 24, alignItems: 'center', gap: 20, overflow: 'hidden', backgroundColor: 'rgba(255,255,255,0.1)', shadowColor: '#E9C7FF', shadowOffset: { width: 0, height: 28 }, shadowOpacity: 0.28, shadowRadius: 44, elevation: 14 },
-  frostFill: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(255,255,255,0.07)' },
+  glassPanel: { width: '100%', borderRadius: 36, padding: 24, alignItems: 'center', gap: 20, overflow: 'hidden', backgroundColor: 'rgba(128,128,128,0.06)' },
+  frostFill: { ...StyleSheet.absoluteFillObject, backgroundColor: 'transparent' },
   iconWrap: { marginBottom: 8 },
-  iconCircle: { width: 84, height: 84, borderRadius: 42, justifyContent: 'center', alignItems: 'center', borderWidth: 0.5, overflow: 'hidden', backgroundColor: 'rgba(255,255,255,0.1)' },
+  iconCircle: { width: 84, height: 84, borderRadius: 42, justifyContent: 'center', alignItems: 'center', borderWidth: 0.5, overflow: 'hidden', backgroundColor: 'rgba(128,128,128,0.06)' },
   title: { fontSize: 28, fontWeight: '800', textAlign: 'center' },
   subtitle: { fontSize: 15, textAlign: 'center', lineHeight: 22 },
-  inputWrap: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, height: 58, width: '100%', overflow: 'hidden', shadowColor: '#64F3FF', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.22, shadowRadius: 22, elevation: 6 },
+  inputWrap: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, height: 58, width: '100%', overflow: 'hidden' },
   input: { flex: 1, fontSize: 16 },
-  inviteBtn: { height: 56, overflow: 'hidden', width: '100%', borderWidth: 0.5, backgroundColor: 'rgba(255,255,255,0.15)', shadowColor: '#E9C7FF', shadowOffset: { width: 0, height: 14 }, shadowOpacity: 0.3, shadowRadius: 26, elevation: 9 },
+  inviteBtn: { height: 56, overflow: 'hidden', width: '100%', borderWidth: 0.5, backgroundColor: 'rgba(128,128,128,0.08)' },
   inviteGrad: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   buttonShine: { position: 'absolute', top: 1, left: 8, right: 8, height: 20, borderRadius: 999, opacity: 0.34 },
   btnText: { color: '#FFFFFF', fontWeight: '700', fontSize: 16 },

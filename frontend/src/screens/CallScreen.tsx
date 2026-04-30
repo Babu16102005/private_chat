@@ -2,7 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, Dimensions, Platform } from 'react-native';
 import { BlurView } from 'expo-blur';
 import Constants from 'expo-constants';
-import { Phone, PhoneOff, Mic, MicOff, Camera, CameraOff } from 'lucide-react-native';
+import { Phone, PhoneOff, Mic, MicOff, Camera, CameraOff, Video, VideoOff } from 'lucide-react-native';
 import { useCall } from '../context/CallContext';
 import { useTheme } from '../context/ThemeContext';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -81,6 +81,7 @@ export const CallScreen = () => {
     endCall, 
     toggleMute, 
     toggleCamera,
+    toggleVideoMode,
     isMuted,
     isCameraOff 
   } = useCall();
@@ -154,6 +155,12 @@ export const CallScreen = () => {
           ) : (
             <TouchableOpacity onPress={endCall} style={[styles.controlBtn, styles.endCallBtn]}>
               <PhoneOff color="white" size={26} />
+            </TouchableOpacity>
+          )}
+
+          {callState === 'CONNECTED' && (
+            <TouchableOpacity onPress={toggleVideoMode} style={[styles.controlBtn, { backgroundColor: isVideoCall ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.22)', borderColor: colors.glassBorder, borderWidth: 0.5 }]}> 
+              {isVideoCall ? <Video color="white" size={25} /> : <VideoOff color="white" size={25} />}
             </TouchableOpacity>
           )}
 

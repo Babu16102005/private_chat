@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useRef, useCallb
 import { Platform, Alert, PermissionsAndroid } from 'react-native';
 import Constants from 'expo-constants';
 import { supabase } from '../services/supabase';
-import { notificationService } from '../services/supabaseService';
+import { messageService, notificationService } from '../services/supabaseService';
 import { useAuth } from './AuthContext';
 import { configureCallAudioMode, restoreDefaultAudioMode, startCallTone, stopCallTone } from '../utils/callAudio';
 import { buildCallSignalPayload, getCallSignalType, getCallTargetId } from '../utils/callSignaling';
@@ -52,6 +52,7 @@ interface CallContextType {
   endCall: () => Promise<void>;
   toggleMute: () => void;
   toggleCamera: () => void;
+  toggleVideoMode: () => Promise<void>;
   isMuted: boolean;
   isCameraOff: boolean;
 }
@@ -120,6 +121,11 @@ const buildPeerConnectionConfiguration = async () => ({
 });
 
 const ICE_RESTART_LIMIT = 1;
+const LOW_BANDWIDTH_VIDEO_CONSTRAINTS = {
+  width: { ideal: 640, max: 960 },
+  height: { ideal: 360, max: 540 },
+  frameRate: { ideal: 18, max: 24 },
+};
 
 const callLog = (message: string, details?: Record<string, any>) => {
   if (__DEV__) {
@@ -163,10 +169,25 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const callStateRef = useRef<CallState>('IDLE');
   const pendingIceCandidates = useRef<any[]>([]);
   const iceRestartCount = useRef(0);
+  const callStartedAtRef = useRef<string | null>(null);
+  const activePairIdRef = useRef<string | null>(null);
+  const isVideoCallRef = useRef(false);
+  const callLoggedRef = useRef(false);
 
   useEffect(() => {
     callStateRef.current = callState;
+    if (callState === 'CONNECTED' && !callStartedAtRef.current) {
+      callStartedAtRef.current = new Date().toISOString();
+    }
   }, [callState]);
+
+  useEffect(() => {
+    activePairIdRef.current = activePairId;
+  }, [activePairId]);
+
+  useEffect(() => {
+    isVideoCallRef.current = isVideoCall;
+  }, [isVideoCall]);
 
   const removeChannel = useCallback((channelRef: React.MutableRefObject<any>) => {
     if (channelRef.current) {
@@ -194,6 +215,8 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Clear pending ICE candidates queue
     pendingIceCandidates.current = [];
     iceRestartCount.current = 0;
+    callStartedAtRef.current = null;
+    callLoggedRef.current = false;
 
     setRemoteSdp(null);
     setRemoteStream(null);
@@ -223,6 +246,45 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return null;
     });
   }, [removeChannel]);
+
+  const logCallHistory = useCallback(async (status: 'completed' | 'missed' | 'rejected' | 'cancelled') => {
+    const pairId = activePairIdRef.current;
+    if (!pairId || callLoggedRef.current) return;
+    callLoggedRef.current = true;
+
+    try {
+      const endedAt = new Date().toISOString();
+      const startedAt = callStartedAtRef.current;
+      await messageService.sendCallHistoryMessage(pairId, {
+        callKind: isVideoCallRef.current ? 'video' : 'audio',
+        callStatus: status,
+        callStartedAt: startedAt || endedAt,
+        callEndedAt: endedAt,
+      });
+    } catch (error) {
+      console.warn('Failed to write call history:', error);
+    }
+  }, []);
+
+  const tuneVideoSenderForLowBandwidth = useCallback(async () => {
+    try {
+      const senders = pc.current?.getSenders?.() || [];
+      const videoSender = senders.find((sender: any) => sender.track?.kind === 'video');
+      if (!videoSender?.getParameters || !videoSender?.setParameters) return;
+
+      const params = videoSender.getParameters() || {};
+      params.encodings = params.encodings?.length ? params.encodings : [{}];
+      params.encodings[0] = {
+        ...params.encodings[0],
+        maxBitrate: 450000,
+        maxFramerate: 20,
+        scaleResolutionDownBy: 1.5,
+      };
+      await videoSender.setParameters(params);
+    } catch (error) {
+      console.warn('Could not tune video bitrate:', error);
+    }
+  }, []);
 
   const ensureOutboundChannel = useCallback((targetUserId: string) => {
     removeChannel(outboundChannel);
@@ -437,7 +499,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await ensureAndroidMediaPermissions(wantsVideo);
       stream = await mediaDevicesImpl.getUserMedia({
         audio: true,
-        video: wantsVideo,
+        video: wantsVideo ? LOW_BANDWIDTH_VIDEO_CONSTRAINTS : false,
       });
     } catch (error: any) {
       if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
@@ -468,7 +530,8 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     setIsCameraOff(!wantsVideo);
     stream.getTracks().forEach((track: any) => pc.current?.addTrack(track, stream));
-  }, [cleanup, ensureOutboundChannel, sendSignal]);
+    if (wantsVideo) tuneVideoSenderForLowBandwidth();
+  }, [cleanup, ensureOutboundChannel, sendSignal, tuneVideoSenderForLowBandwidth]);
 
   const initiateCall = async (pairId: string, partner: any, isVideo: boolean) => {
     try {
@@ -549,6 +612,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await sendSignal('call-answer', { sdp: answer });
       stopCallTone();
       setCallState('CONNECTED');
+      callStartedAtRef.current = new Date().toISOString();
     } catch (error: any) {
       console.error('Call accept failed:', error);
       Alert.alert('Call failed', error?.message || 'Could not answer the call.');
@@ -566,6 +630,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.error('Failed to reject call:', error);
       }
     }
+    await logCallHistory('rejected');
     cleanup();
   };
 
@@ -579,6 +644,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.error('Failed to end call:', error);
       }
     }
+    await logCallHistory(callStateRef.current === 'CONNECTED' ? 'completed' : 'cancelled');
     cleanup();
   };
 
@@ -600,6 +666,51 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsCameraOff(!isCameraOff);
   };
 
+  const replaceVideoTrack = async (nextTrack: any, stream: any) => {
+    const sender = pc.current?.getSenders?.().find((item: any) => item.track?.kind === 'video');
+    if (sender?.replaceTrack) {
+      await sender.replaceTrack(nextTrack);
+    } else if (nextTrack) {
+      pc.current?.addTrack(nextTrack, stream);
+    }
+  };
+
+  const toggleVideoMode = async () => {
+    if (!pc.current || !mediaDevicesImpl?.getUserMedia) return;
+
+    if (isVideoCall) {
+      const videoTracks = localStream?.getVideoTracks?.() || [];
+      for (const track of videoTracks) {
+        track.enabled = false;
+        track.stop?.();
+        await replaceVideoTrack(null, localStream);
+      }
+      setIsVideoCall(false);
+      setIsCameraOff(true);
+      return;
+    }
+
+    try {
+      await ensureAndroidMediaPermissions(true);
+      const videoStream = await mediaDevicesImpl.getUserMedia({ audio: false, video: LOW_BANDWIDTH_VIDEO_CONSTRAINTS });
+      const [videoTrack] = videoStream.getVideoTracks();
+      if (!videoTrack) return;
+
+      await replaceVideoTrack(videoTrack, videoStream);
+      setLocalStream((currentStream: any) => {
+        if (!currentStream) return videoStream;
+        currentStream.addTrack(videoTrack);
+        return currentStream;
+      });
+      setIsVideoCall(true);
+      setIsCameraOff(false);
+      tuneVideoSenderForLowBandwidth();
+    } catch (error) {
+      console.error('Switch to video failed:', error);
+      Alert.alert('Camera unavailable', 'Could not turn on video for this call.');
+    }
+  };
+
   return (
     <CallContext.Provider value={{
       localStream,
@@ -614,6 +725,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       endCall,
       toggleMute,
       toggleCamera,
+      toggleVideoMode,
       isMuted,
       isCameraOff
     }}>

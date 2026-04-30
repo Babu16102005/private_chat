@@ -321,35 +321,35 @@ function SettingItem({ icon, label, value, onPress, isLast }: {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  headerBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 12, justifyContent: 'space-between', backgroundColor: 'rgba(255,255,255,0.08)', overflow: 'hidden' },
+  headerBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 12, justifyContent: 'space-between', overflow: 'hidden' },
   backBtn: { width: 40, height: 40, borderRadius: 18, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.1)', borderWidth: 0.5 },
   headerTitle: { fontSize: 20, fontWeight: '700' },
   scrollArea: { paddingHorizontal: 16, paddingTop: 20 },
 
   // Profile header
-  profileHeader: { alignItems: 'center', marginBottom: 24, paddingVertical: 24, borderRadius: 30, overflow: 'hidden', backgroundColor: 'rgba(255,255,255,0.1)', shadowColor: '#E9C7FF', shadowOffset: { width: 0, height: 16 }, shadowOpacity: 0.24, shadowRadius: 30, elevation: 7 },
+  profileHeader: { alignItems: 'center', marginBottom: 24, paddingVertical: 24, borderRadius: 30, overflow: 'hidden', backgroundColor: 'rgba(128,128,128,0.06)' },
   profileAvatar: { width: 88, height: 88, marginBottom: 12, borderWidth: StyleSheet.hairlineWidth },
   profileName: { fontSize: 22, fontWeight: '700' },
   profileStatus: { fontSize: 14, marginTop: 4 },
 
   // Sections
-  section: { marginBottom: 18, borderRadius: 24, overflow: 'hidden', backgroundColor: 'rgba(255,255,255,0.08)', shadowColor: '#E9C7FF', shadowOffset: { width: 0, height: 14 }, shadowOpacity: 0.2, shadowRadius: 26, elevation: 6 },
+  section: { marginBottom: 18, borderRadius: 24, overflow: 'hidden', backgroundColor: 'rgba(128,128,128,0.04)' },
   menuItem: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: 'rgba(255,255,255,0.06)' },
   menuLabel: { flex: 1, fontSize: 16, fontWeight: '500', marginLeft: 14 },
   settingValue: { fontSize: 14, color: 'rgba(255,255,255,0.5)' },
   menuItemLast: { borderBottomWidth: 0 },
 
   // Media counts
-  mediaCount: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 18, margin: 12, borderWidth: StyleSheet.hairlineWidth },
+  mediaCount: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 18, margin: 12, borderWidth: 0.5, backgroundColor: 'rgba(128,128,128,0.06)' },
   mediaCountItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10 },
   mediaLabel: { flex: 1, fontSize: 15, marginLeft: 14 },
   mediaValue: { fontSize: 15 },
   backgroundGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, padding: 12 },
-  backgroundOption: { width: '30%', minWidth: 88, borderRadius: 18, padding: 6, borderWidth: 1, borderColor: 'rgba(255,255,255,0.28)', backgroundColor: 'rgba(255,255,255,0.14)' },
+  backgroundOption: { width: '30%', minWidth: 88, borderRadius: 18, padding: 6, borderWidth: 1, borderColor: 'rgba(255,255,255,0.14)', backgroundColor: 'rgba(255,255,255,0.06)' },
   backgroundPreview: { height: 64, borderRadius: 14, marginBottom: 8 },
   backgroundName: { fontSize: 11, fontWeight: '600', textAlign: 'center' },
   customBackgroundArea: { flexDirection: 'row', gap: 10, paddingHorizontal: 12, paddingBottom: 12 },
-  uploadButton: { flex: 1, minHeight: 46, borderRadius: 18, borderWidth: 1, backgroundColor: 'rgba(255,255,255,0.16)', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 10 },
+  uploadButton: { flex: 1, minHeight: 46, borderRadius: 18, borderWidth: 1, backgroundColor: 'rgba(255,255,255,0.08)', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 10 },
   uploadText: { fontSize: 13, fontWeight: '700' },
   opacityArea: { paddingHorizontal: 12, paddingBottom: 14 },
   opacityLabel: { fontSize: 12, fontWeight: '700', textTransform: 'uppercase', marginBottom: 8 },

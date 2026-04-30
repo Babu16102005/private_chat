@@ -72,7 +72,9 @@
         }
       ],
       "expo-audio",
-      "expo-asset"
+      "expo-asset",
+      "expo-secure-store",
+      "expo-sqlite"
     ],
     "owner": "babu_b",
     "extra": {

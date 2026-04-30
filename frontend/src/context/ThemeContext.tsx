@@ -58,28 +58,28 @@ const obsidianTheme: ThemeColors = {
 };
 
 const mochaTheme: ThemeColors = {
-  primary: '#FF7A5C', // Living coral
-  secondary: '#FF3B86',
-  tertiary: '#FFD36E',
-  background: '#09010C', // Warm plum espresso
-  bubbleSentBg: 'rgba(255, 255, 255, 0.12)',
-  bubbleReceivedBg: 'rgba(255, 255, 255, 0.06)',
-  white: 'rgba(255, 255, 255, 0.8)',
-  black: '#100D0C',
-  gray: 'rgba(255, 255, 255, 0.5)',
-  lightGray: 'rgba(255, 255, 255, 0.05)',
-  text: '#FDF7F2',
-  gradientPrimary: ['#21111A', '#100912', '#050305'], // Warm depth gradient
-  gradientSecondary: ['rgba(255,255,255,0.34)', 'rgba(255,122,92,0.32)', 'rgba(255,211,110,0.2)', 'rgba(255,255,255,0.16)'],
-  glassBorder: 'rgba(255, 255, 255, 0.18)',
-  borderWidth: 0.5,
-  glassOpacity: 0.12,
-  glassBlur: 80,
+  primary: '#769FCD', // Deep Sky Blue (Accent)
+  secondary: '#B9D7EA', // Soft Blue
+  tertiary: '#D6E6F2', // Light Sky
+  background: '#F7FBFC', // Main Background (Ultra Light)
+  bubbleSentBg: 'rgba(118, 159, 205, 0.14)',
+  bubbleReceivedBg: 'rgba(185, 215, 234, 0.18)',
+  white: '#F7FBFC',
+  black: '#000000',
+  gray: 'rgba(118, 159, 205, 0.65)',
+  lightGray: 'rgba(0, 0, 0, 0.04)',
+  text: '#112D4E', // Deep Navy for high contrast
+  gradientPrimary: ['#F7FBFC', '#D6E6F2', '#B9D7EA', '#F7FBFC'], 
+  gradientSecondary: ['rgba(118, 159, 205, 0.3)', 'rgba(185, 215, 234, 0.25)', 'rgba(214, 230, 242, 0.2)'],
+  glassBorder: 'rgba(118, 159, 205, 0.2)',
+  borderWidth: 0.8,
+  glassOpacity: 0.05,
+  glassBlur: 40,
   radius: {
-    pill: 30,
+    pill: 999,
     panel: 40,
     card: 24,
-    bubble: 18,
+    bubble: 20,
     story: 999
   }
 };
@@ -106,7 +106,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const colors = themeMode === 'obsidian' ? obsidianTheme : mochaTheme;
-  const isDark = true; // Both are technically "dark mode" conceptual designs
+  const isDark = themeMode === 'obsidian';
 
   return (
     <ThemeContext.Provider value={{ themeMode, isDark, toggleTheme, colors }}>

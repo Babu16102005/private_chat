@@ -1,9 +1,10 @@
 import React, { useState, useRef, useEffect, memo } from 'react';
 import { View, Text, TouchableOpacity, Image, Alert, StyleSheet, Platform, Linking } from 'react-native';
-import { Check, CheckCheck, Play, Pause, Reply } from 'lucide-react-native';
+import { Check, CheckCheck, FileText, Phone, Play, Pause, Reply } from 'lucide-react-native';
 import { Audio } from 'expo-av';
 import { LinearGradient } from 'expo-linear-gradient';
 import { File, Paths } from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 import { useTheme } from '../context/ThemeContext';
 import { formatMessageTime } from '../utils/date';
 
@@ -24,7 +25,10 @@ interface MessageBubbleProps {
   onDelete?: () => void;
   onReply?: () => void;
   mediaUrl?: string;
-  messageType?: 'text' | 'image' | 'video' | 'audio' | 'voice';
+  messageType?: 'text' | 'image' | 'video' | 'audio' | 'voice' | 'document' | 'system_call' | 'encrypted';
+  fileName?: string;
+  fileSize?: number | null;
+  mimeType?: string | null;
   replyToMessage?: ReplyToMessage | null;
   onImageTap?: (uri: string) => void;
   onMediaTap?: (uri: string, type: 'image' | 'video' | 'audio') => void;
@@ -72,10 +76,10 @@ function parseTextWithLinks(text: string): TextPart[] {
 export const MessageBubble: React.FC<MessageBubbleProps> = memo(
   function MessageBubble({
     content, isMe, timestamp, delivered_at, read_at,
-    onDelete, onReply, mediaUrl, messageType,
+    onDelete, onReply, mediaUrl, messageType, fileName, fileSize, mimeType,
     replyToMessage, onImageTap, onMediaTap,
   }) {
-    const { colors } = useTheme();
+    const { colors, isDark } = useTheme();
 
     // Audio playback state
     const [isPlaying, setIsPlaying] = useState(false);
@@ -115,7 +119,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = memo(
     };
 
     const handleLongPress = () => {
-      const canSaveMedia = !!mediaUrl && (normalizedMessageType === 'image' || normalizedMessageType === 'video');
+      const canSaveMedia = !!mediaUrl && (normalizedMessageType === 'image' || normalizedMessageType === 'video' || normalizedMessageType === 'document');
       if (!onDelete && !onReply && !canSaveMedia) return;
 
       const buttons: any[] = [
@@ -151,13 +155,13 @@ export const MessageBubble: React.FC<MessageBubbleProps> = memo(
     };
 
     async function handleDownloadMedia() {
-      if (!mediaUrl || (normalizedMessageType !== 'image' && normalizedMessageType !== 'video')) return;
+      if (!mediaUrl || (normalizedMessageType !== 'image' && normalizedMessageType !== 'video' && normalizedMessageType !== 'document')) return;
 
       try {
         if (Platform.OS === 'web') {
           const link = document.createElement('a');
           link.href = mediaUrl;
-          link.download = `kiba-${Date.now()}.${getMediaExtension(mediaUrl, normalizedMessageType)}`;
+          link.download = fileName || `kiba-${Date.now()}.${getMediaExtension(mediaUrl, normalizedMessageType)}`;
           link.target = '_blank';
           document.body.appendChild(link);
           link.click();
@@ -166,13 +170,21 @@ export const MessageBubble: React.FC<MessageBubbleProps> = memo(
         }
 
         const extension = getMediaExtension(mediaUrl, normalizedMessageType);
-        const fileName = `kiba-${Date.now()}.${extension}`;
-        await File.downloadFileAsync(mediaUrl, new File(Paths.document, fileName), { idempotent: true });
-
-        Alert.alert('Downloaded', `Saved to app storage as ${fileName}`);
+        const downloadedFileName = fileName || `kiba-${Date.now()}.${extension}`;
+        
+        const dir = Paths.document || Paths.cache;
+        const destination = new File(dir, downloadedFileName);
+        
+        const { uri } = await File.downloadFileAsync(mediaUrl, destination);
+        
+        if (await Sharing.isAvailableAsync()) {
+          await Sharing.shareAsync(uri);
+        } else {
+          Alert.alert('Downloaded', `Saved as ${downloadedFileName}`);
+        }
       } catch (error) {
         console.error('Media download failed:', error);
-        Alert.alert('Download failed', 'Could not download this media. Please check your connection and try again.');
+        Alert.alert('Download failed', 'Could not download or open this media.');
       }
     }
 
@@ -289,6 +301,23 @@ export const MessageBubble: React.FC<MessageBubbleProps> = memo(
 
     const progressPercent = duration > 0 ? Math.min(progress / duration, 1) : 0;
 
+    const formatFileSize = (size?: number | null) => {
+      if (!size) return mimeType || 'Document';
+      if (size < 1024 * 1024) return `${Math.ceil(size / 1024)} KB`;
+      return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+    };
+
+    if (messageType === 'system_call') {
+      return (
+        <View style={styles.systemOuter}>
+          <View style={[styles.systemPill, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.03)' }]}>
+            {isMe ? <Phone size={12} color={colors.text} /> : <Phone size={12} color={colors.text} />}
+            <Text style={[styles.systemText, { color: colors.text }]}>{content || 'Call ended'}</Text>
+          </View>
+        </View>
+      );
+    }
+
     return (
       <View style={[styles.outer, { alignItems: isMe ? 'flex-end' : 'flex-start' }]}>
         <TouchableOpacity
@@ -342,7 +371,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = memo(
               <TouchableOpacity
                 activeOpacity={0.7}
                 onPress={handleAudioTap}
-                style={[styles.audioBubble, { borderColor: colors.glassBorder }]}
+                style={[styles.audioBubble, { borderColor: colors.glassBorder, backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.03)' }]}
               >
                 <View style={[styles.playBtn, { backgroundColor: isMe ? colors.primary : 'rgba(255,255,255,0.2)' }]}>
                   {isPlaying ? (
@@ -352,8 +381,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = memo(
                   )}
                 </View>
                 <View style={styles.audioProgressWrap}>
-                  <View style={styles.audioProgressTrack}>
-                    <View style={[styles.audioProgressFill, { width: `${progressPercent * 100}%` }]} />
+                  <View style={[styles.audioProgressTrack, { backgroundColor: isDark ? 'rgba(255,255,255,0.24)' : 'rgba(0,0,0,0.1)' }]}>
+                    <View style={[styles.audioProgressFill, { width: `${progressPercent * 100}%`, backgroundColor: isDark ? 'rgba(255,255,255,0.7)' : colors.primary }]} />
                   </View>
                 </View>
                 <Text style={[styles.audioDuration, { color: isMe ? 'rgba(255,255,255,0.6)' : 'rgba(255,255,255,0.8)' }]}>
@@ -361,6 +390,18 @@ export const MessageBubble: React.FC<MessageBubbleProps> = memo(
                 </Text>
               </TouchableOpacity>
             </View>
+          ) : null}
+
+          {messageType === 'document' && mediaUrl ? (
+            <TouchableOpacity activeOpacity={0.78} onPress={handleDownloadMedia} style={[styles.documentCard, { borderColor: colors.glassBorder }]}> 
+              <View style={[styles.documentIcon, { backgroundColor: colors.primary }]}> 
+                <FileText size={22} color="white" />
+              </View>
+              <View style={styles.documentTextWrap}>
+                <Text style={[styles.documentName, { color: colors.text }]} numberOfLines={1}>{fileName || content || 'Document'}</Text>
+                <Text style={[styles.documentMeta, { color: colors.gray }]} numberOfLines={1}>{formatFileSize(fileSize)}</Text>
+              </View>
+            </TouchableOpacity>
           ) : null}
 
           {/* Text content */}
@@ -377,7 +418,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = memo(
           <View style={styles.metaRow}>
             <Text style={[
               styles.timeText,
-              { color: isMe ? 'rgba(255,255,255,0.45)' : 'rgba(255,255,255,0.6)' },
+              { color: isDark ? (isMe ? 'rgba(255,255,255,0.45)' : 'rgba(255,255,255,0.6)') : colors.gray },
             ]}>
               {formatMessageTime(timestamp)}
             </Text>
@@ -393,6 +434,24 @@ const styles = StyleSheet.create({
   outer: {
     marginBottom: 4,
     paddingHorizontal: 8,
+  },
+  systemOuter: {
+    alignItems: 'center',
+    marginVertical: 8,
+  },
+  systemPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 18,
+    borderWidth: 0.5,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+  },
+  systemText: {
+    fontSize: 12,
+    fontWeight: '700',
   },
   bubble: {
     minWidth: 40,
@@ -531,6 +590,36 @@ const styles = StyleSheet.create({
   },
   audioDuration: {
     fontSize: 12,
+  },
+  documentCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    minWidth: 220,
+    marginVertical: 4,
+    marginBottom: 10,
+    padding: 10,
+    borderRadius: 18,
+    borderWidth: 0.5,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+  },
+  documentIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  documentTextWrap: {
+    flex: 1,
+  },
+  documentName: {
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  documentMeta: {
+    fontSize: 12,
+    marginTop: 3,
   },
 
   // Quote/Reply preview

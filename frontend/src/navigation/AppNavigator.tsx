@@ -12,6 +12,8 @@ import { ChatScreen } from '../screens/ChatScreen';
 import { InviteScreen } from '../screens/InviteScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
 import { ChatSettingsScreen } from '../screens/ChatSettingsScreen';
+import { CreateStoryScreen } from '../screens/CreateStoryScreen';
+import { StoryViewerScreen } from '../screens/StoryViewerScreen';
 import { RootStackParamList } from './types';
 import { useTheme } from '../context/ThemeContext';
 
@@ -61,7 +63,7 @@ export const AppNavigator = () => {
   }
 
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Navigator key={session ? 'app' : 'auth'} screenOptions={{ headerShown: false }}>
       {session ? (
         <>
           <Stack.Screen name="Home" component={HomeScreen} />
@@ -69,6 +71,8 @@ export const AppNavigator = () => {
           <Stack.Screen name="Invite" component={InviteScreen} />
           <Stack.Screen name="Profile" component={ProfileScreen} />
           <Stack.Screen name="ChatSettings" component={ChatSettingsScreen} />
+          <Stack.Screen name="CreateStory" component={CreateStoryScreen} />
+          <Stack.Screen name="StoryViewer" component={StoryViewerScreen} />
         </>
       ) : (
         <>

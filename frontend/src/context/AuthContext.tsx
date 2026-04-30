@@ -30,15 +30,24 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const clearStaleSession = async () => {
+  const clearStoredAuth = async () => {
     try {
       // Remove all supabase auth keys from AsyncStorage
       const keys = await AsyncStorage.getAllKeys();
       const supabaseKeys = keys.filter(k => k.includes('supabase') || k.includes('sb-'));
       if (supabaseKeys.length > 0) await AsyncStorage.multiRemove(supabaseKeys);
-      await supabase.auth.signOut();
     } catch (e) {
       // Ignore errors during cleanup
+    }
+  };
+
+  const clearStaleSession = async () => {
+    try {
+      await supabase.auth.signOut();
+    } catch (e) {
+      // Ignore sign-out errors for invalid/expired sessions.
+    } finally {
+      await clearStoredAuth();
     }
   };
 
@@ -92,7 +101,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
       // TOKEN_REFRESH_FAILED means the stored refresh token is invalid — force sign out
       if ((event as string) === 'TOKEN_REFRESH_FAILED' || event === 'SIGNED_OUT') {
-        await clearStaleSession();
+        await clearStoredAuth();
         if (isMounted) {
           setSession(null);
           setLoading(false);
@@ -131,7 +140,16 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   const signOut = async () => {
-    await authService.signOut();
+    setLoading(true);
+    try {
+      await authService.signOut();
+    } catch (error) {
+      console.warn('Sign out request failed; clearing local session anyway:', error);
+    } finally {
+      await clearStoredAuth();
+      setSession(null);
+      setLoading(false);
+    }
   };
 
   const resetPassword = async (email: string) => {

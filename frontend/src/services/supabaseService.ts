@@ -11,6 +11,19 @@ type PushNotificationPayload = {
   data?: Record<string, any>;
 };
 
+export type MessageType = 'text' | 'image' | 'video' | 'audio' | 'voice' | 'document' | 'system_call' | 'encrypted';
+
+export type SendMessageOptions = {
+  fileName?: string;
+  fileSize?: number;
+  mimeType?: string;
+  callStartedAt?: string;
+  callEndedAt?: string;
+  callDurationSeconds?: number;
+  callKind?: 'audio' | 'video';
+  callStatus?: 'completed' | 'missed' | 'rejected' | 'cancelled';
+};
+
 const getPairRecipientId = async (pairId: string, senderId: string) => {
   const { data, error } = await supabase
     .from('pairs')
@@ -44,6 +57,9 @@ const sendPushNotification = async (payload: PushNotificationPayload) => {
 const buildMessageNotificationBody = (content: string, messageType: string) => {
   if (messageType === 'image') return 'Sent you a photo';
   if (messageType === 'video') return 'Sent you a video';
+  if (messageType === 'document') return 'Sent you a document';
+  if (messageType === 'system_call') return content || 'Call ended';
+  if (messageType === 'encrypted') return 'Sent you an encrypted message';
   if (messageType === 'audio' || messageType === 'voice') return 'Sent you a voice message';
   return content || 'Sent you a message';
 };
@@ -378,18 +394,44 @@ export const messageService = {
     }
   },
 
-  async sendMessage(pairId: string, content: string, mediaUrl?: string, messageType: 'text' | 'image' | 'video' | 'audio' | 'voice' = 'text', replyToMessageId?: string) {
+  async sendMessage(pairId: string, content: string, mediaUrl?: string, messageType: MessageType = 'text', replyToMessageId?: string, options: SendMessageOptions = {}) {
     try {
       const user = await authService.getCurrentUser();
       if (!user) throw new Error('Auth required');
-      const dbMessageType = messageType === 'audio' ? 'voice' : messageType;
-      const payload: any = { pair_id: pairId, sender_id: user.id, content, media_url: mediaUrl, message_type: dbMessageType };
+      const payload: any = { pair_id: pairId, sender_id: user.id, content, media_url: mediaUrl, message_type: messageType };
       if (replyToMessageId) payload.reply_to_message_id = replyToMessageId;
+      if (options.fileName) payload.file_name = options.fileName;
+      if (options.fileSize !== undefined) payload.file_size = options.fileSize;
+      if (options.mimeType) payload.mime_type = options.mimeType;
+      if (options.callStartedAt) payload.call_started_at = options.callStartedAt;
+      if (options.callEndedAt) payload.call_ended_at = options.callEndedAt;
+      if (options.callDurationSeconds !== undefined) payload.call_duration_seconds = options.callDurationSeconds;
+      if (options.callKind) payload.call_kind = options.callKind;
+      if (options.callStatus) payload.call_status = options.callStatus;
       const { data, error } = await supabase.from('messages').insert(payload).select().single();
       if (error) throw error;
-      notificationService.sendMessagePush(pairId, data);
+      if (messageType !== 'system_call') notificationService.sendMessagePush(pairId, data);
       return data;
     } catch (error) { throw error; }
+  },
+
+  async sendCallHistoryMessage(pairId: string, options: Required<Pick<SendMessageOptions, 'callKind' | 'callStatus'>> & SendMessageOptions) {
+    const started = options.callStartedAt ? new Date(options.callStartedAt) : null;
+    const ended = options.callEndedAt ? new Date(options.callEndedAt) : new Date();
+    const duration = options.callDurationSeconds ?? (started ? Math.max(0, Math.round((ended.getTime() - started.getTime()) / 1000)) : 0);
+    const minutes = Math.floor(duration / 60);
+    const seconds = duration % 60;
+    const durationText = duration > 0 ? `${minutes}:${seconds.toString().padStart(2, '0')}` : 'No answer';
+    const kindLabel = options.callKind === 'video' ? 'Video call' : 'Voice call';
+    const statusLabel = options.callStatus === 'completed' ? durationText : options.callStatus;
+
+    const callOptions = {
+      ...options,
+      callEndedAt: ended.toISOString(),
+      callDurationSeconds: duration,
+    };
+
+    return messageService.sendMessage(pairId, `${kindLabel} - ${statusLabel}`, undefined, 'system_call', undefined, callOptions);
   },
 
   async getRepliedMessage(messageId: string) {
@@ -449,7 +491,7 @@ export const messageService = {
 };
 
 export const storageService = {
-  async uploadFile(file: any, bucket: string = 'chat-media') {
+  async uploadFile(file: any, bucket: string = 'chat-media', onProgress?: (progress: number) => void) {
     try {
       const user = await authService.getCurrentUser();
       if (!user) throw new Error('Auth required');
@@ -556,8 +598,9 @@ export const chatSettingsService = {
       const messages = data || [];
       const mediaCount = messages.filter((message: any) => message.message_type === 'image' || message.message_type === 'video').length;
       const linkCount = messages.filter((message: any) => /\bhttps?:\/\/[^\s]+/i.test(message.content || '')).length;
+      const docsCount = messages.filter((message: any) => message.message_type === 'document').length;
 
-      return { mediaCount, linkCount, docsCount: 0 };
+      return { mediaCount, linkCount, docsCount };
     } catch (error) {
       console.error('Get chat content counts error:', error);
       return { mediaCount: 0, linkCount: 0, docsCount: 0 };
@@ -659,5 +702,76 @@ export const chatSettingsService = {
       const { error } = await supabase.from('deleted_messages').upsert(inserts, { onConflict: 'message_id,user_id', ignoreDuplicates: true });
       if (error) console.error('Clear chat upsert error:', error);
     } catch (error) { console.error('Clear chat error:', error); }
+  },
+};
+
+export const storyService = {
+  async getStories() {
+    try {
+      const { data, error } = await supabase
+        .from('stories')
+        .select('*, user:users(*)')
+        .gt('expires_at', new Date().toISOString())
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      console.error('getStories error:', error);
+      return [];
+    }
+  },
+
+  async createStory(mediaUrl: string, mediaType: 'image' | 'video', caption?: string) {
+    const user = await authService.getCurrentUser();
+    if (!user) throw new Error('Auth required');
+
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    const { data, error } = await supabase
+      .from('stories')
+      .insert({ user_id: user.id, media_url: mediaUrl, media_type: mediaType, caption, expires_at: expiresAt })
+      .select('*, user:users(*)')
+      .single();
+    if (error) throw error;
+    return data;
+  },
+
+  async markViewed(storyId: string) {
+    try {
+      const user = await authService.getCurrentUser();
+      if (!user) return;
+      await supabase
+        .from('story_views')
+        .upsert({ story_id: storyId, viewer_id: user.id }, { onConflict: 'story_id,viewer_id', ignoreDuplicates: true });
+    } catch (error) {
+      console.warn('markViewed story failed:', error);
+    }
+  },
+
+  subscribeToStories(callback: () => void) {
+    return supabase
+      .channel('stories-feed')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'stories' }, callback)
+      .subscribe();
+  },
+};
+
+export const cryptoKeyService = {
+  async upsertPublicKeys(identityPublicKey: string, signedPrekey?: string) {
+    const user = await authService.getCurrentUser();
+    if (!user) throw new Error('Auth required');
+    const { error } = await supabase
+      .from('user_crypto_keys')
+      .upsert({ user_id: user.id, identity_public_key: identityPublicKey, signed_prekey: signedPrekey, updated_at: new Date().toISOString() });
+    if (error) throw error;
+  },
+
+  async getPublicKeys(userId: string) {
+    const { data, error } = await supabase
+      .from('user_crypto_keys')
+      .select('*')
+      .eq('user_id', userId)
+      .maybeSingle();
+    if (error) throw error;
+    return data;
   },
 };

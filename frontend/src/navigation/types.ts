@@ -7,4 +7,6 @@ export type RootStackParamList = {
   Invite: { token?: string } | undefined;
   Profile: undefined;
   ChatSettings: { pairId: string; partner: any };
+  CreateStory: undefined;
+  StoryViewer: { story: any };
 };

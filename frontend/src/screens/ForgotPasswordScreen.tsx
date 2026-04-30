@@ -43,7 +43,7 @@ export const ForgotPasswordScreen = ({ navigation }: any) => {
           <Text style={[styles.title, { color: colors.text }]}>Forgot Password?</Text>
           <Text style={[styles.subtitle, { color: colors.gray }]}>Enter your email and we&apos;ll send you a link to reset your password.</Text>
 
-          <BlurView intensity={colors.glassBlur + 18} tint={isDark ? 'dark' : 'light'} style={[styles.inputWrap, { backgroundColor: 'rgba(255,255,255,0.08)', borderColor: colors.glassBorder, borderRadius: 22, borderWidth: colors.borderWidth }]}> 
+          <BlurView intensity={colors.glassBlur + 18} tint={isDark ? 'dark' : 'light'} style={[styles.inputWrap, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.03)', borderColor: colors.glassBorder, borderRadius: 22, borderWidth: colors.borderWidth }]}> 
             <Mail size={20} color={colors.gray} style={{ marginRight: 12 }} />
             <TextInput
               style={[styles.input, { color: colors.text }]}
@@ -85,14 +85,14 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   inner: { flex: 1 },
   topBar: { paddingHorizontal: 16 },
-  backBtn: { width: 40, height: 40, borderRadius: 18, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.1)', borderWidth: 0.5 },
+  backBtn: { width: 40, height: 40, borderRadius: 18, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.08)', borderWidth: 0.5 },
   content: { flex: 1, justifyContent: 'center', paddingHorizontal: 24 },
-  glassPanel: { borderRadius: 34, padding: 24, gap: 20, overflow: 'hidden', backgroundColor: 'rgba(255,255,255,0.1)', shadowColor: '#E9C7FF', shadowOffset: { width: 0, height: 28 }, shadowOpacity: 0.28, shadowRadius: 44, elevation: 14 },
+  glassPanel: { borderRadius: 34, padding: 24, gap: 20, overflow: 'hidden', backgroundColor: 'rgba(255,255,255,0.06)' },
   title: { fontSize: 30, fontWeight: '800' },
   subtitle: { fontSize: 15, lineHeight: 22, fontWeight: '400' },
-  inputWrap: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, height: 56, marginBottom: 4, overflow: 'hidden', shadowColor: '#64F3FF', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.22, shadowRadius: 22, elevation: 6 },
+  inputWrap: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, height: 56, marginBottom: 4, overflow: 'hidden' },
   input: { flex: 1, fontSize: 16 },
-  sendBtn: { overflow: 'hidden', height: 56, borderWidth: 0.5, backgroundColor: 'rgba(255,255,255,0.15)', shadowColor: '#E9C7FF', shadowOffset: { width: 0, height: 14 }, shadowOpacity: 0.3, shadowRadius: 26, elevation: 9 },
+  sendBtn: { overflow: 'hidden', height: 56, borderWidth: 0.5, backgroundColor: 'rgba(255,255,255,0.08)' },
   sendGrad: { flex: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'center' },
   buttonShine: { position: 'absolute', top: 1, left: 8, right: 8, height: 20, borderRadius: 999, opacity: 0.34 },
   btnText: { color: '#FFFFFF', fontWeight: '700', fontSize: 16 },

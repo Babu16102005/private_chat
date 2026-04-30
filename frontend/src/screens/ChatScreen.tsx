@@ -7,6 +7,7 @@ import { BlurView } from 'expo-blur';
 import { ChevronLeft, Phone, Video, Mic, Camera, SendHorizontal, Search, X, CircleStop, MoreVertical, Reply as ReplyIcon } from 'lucide-react-native';
 import { messageService, deleteMessageService, storageService, profileService, messageReactionsService, chatSettingsService } from '../services/supabaseService';
 import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
 import { useAudioRecorder, AudioModule, RecordingPresets, setAudioModeAsync } from 'expo-audio';
 
 import { supabase } from '../services/supabase';
@@ -61,6 +62,8 @@ export const ChatScreen = ({ route, navigation }: any) => {
   const isRecordingTransitionRef = useRef(false);
   const [senderName, setSenderName] = useState('');
   const [backgroundSettings, setBackgroundSettings] = useState(defaultChatBackgroundSettings);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [isUploading, setIsUploading] = useState(false);
 
   // Reply state
   const [replyingTo, setReplyingTo] = useState<ReplyToMessage | null>(null);
@@ -234,7 +237,7 @@ export const ChatScreen = ({ route, navigation }: any) => {
     }, 2000);
   };
 
-  const sendMessage = useCallback(async (content: string, mediaUrl?: string, msgType?: any) => {
+  const sendMessage = useCallback(async (content: string, mediaUrl?: string, msgType?: any, options?: any) => {
     const trimmed = content?.trim();
     if (!trimmed && !mediaUrl) return;
     try {
@@ -243,7 +246,7 @@ export const ChatScreen = ({ route, navigation }: any) => {
         messageService.sendTypingIndicator(typingChannelRef.current, false);
       }
 
-      await messageService.sendMessage(pairId, trimmed, mediaUrl, msgType || 'text', replyingTo?.id);
+      await messageService.sendMessage(pairId, trimmed, mediaUrl, msgType || 'text', replyingTo?.id, options);
       setReplyingTo(null);
       setInput('');
       setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
@@ -253,8 +256,8 @@ export const ChatScreen = ({ route, navigation }: any) => {
     }
   }, [pairId, replyingTo]);
 
-  const normalizeMessageType = (messageType?: string, mediaUrl?: string, content?: string): 'text' | 'image' | 'video' | 'audio' => {
-    if (messageType === 'image' || messageType === 'video' || messageType === 'audio' || messageType === 'voice') {
+  const normalizeMessageType = (messageType?: string, mediaUrl?: string, content?: string): 'text' | 'image' | 'video' | 'audio' | 'document' | 'system_call' | 'encrypted' => {
+    if (messageType === 'image' || messageType === 'video' || messageType === 'audio' || messageType === 'voice' || messageType === 'document' || messageType === 'system_call' || messageType === 'encrypted') {
       return messageType === 'voice' ? 'audio' : messageType;
     }
 
@@ -290,6 +293,14 @@ export const ChatScreen = ({ route, navigation }: any) => {
   };
 
   const handleAttach = async () => {
+    Alert.alert('Share', 'Choose what to send', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Photo or video', onPress: handleMediaAttach },
+      { text: 'Document', onPress: handleDocumentAttach },
+    ]);
+  };
+
+  const handleMediaAttach = async () => {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.All,
@@ -305,12 +316,67 @@ export const ChatScreen = ({ route, navigation }: any) => {
         const fallbackName = asset.type === 'video' ? 'video.mp4' : 'photo.jpg';
         const uploadFile = buildUploadFile(asset.uri, fallbackName, mimeType);
 
-        const url = await storageService.uploadFile(uploadFile);
+        setIsUploading(true);
+        setUploadProgress(0.1);
+        
+        // Progress simulation
+        const interval = setInterval(() => {
+          setUploadProgress(prev => Math.min(prev + 0.1, 0.9));
+        }, 500);
+
+        const url = await storageService.uploadFile(uploadFile, 'chat-media');
+        
+        clearInterval(interval);
+        setUploadProgress(1);
         await sendMessage('', url, asset.type === 'video' ? 'video' : 'image');
       }
     } catch (e) {
       console.error(e);
       Alert.alert('Error', 'Failed to attach media');
+    } finally {
+      setTimeout(() => {
+        setIsUploading(false);
+        setUploadProgress(0);
+      }, 500);
+    }
+  };
+
+  const handleDocumentAttach = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        copyToCacheDirectory: true,
+        multiple: false,
+      });
+
+      if (result.canceled || !result.assets[0]) return;
+      const asset = result.assets[0];
+      const uploadFile = buildUploadFile(asset.uri, asset.name || 'document', asset.mimeType || 'application/octet-stream');
+      
+      setIsUploading(true);
+      setUploadProgress(0.1);
+
+      // Progress simulation
+      const interval = setInterval(() => {
+        setUploadProgress(prev => Math.min(prev + 0.1, 0.9));
+      }, 500);
+
+      const url = await storageService.uploadFile(uploadFile, 'chat-media');
+      
+      clearInterval(interval);
+      setUploadProgress(1);
+      await sendMessage(asset.name || 'Document', url, 'document', {
+        fileName: asset.name,
+        fileSize: asset.size,
+        mimeType: asset.mimeType,
+      });
+    } catch (error) {
+      console.error('Document attach failed:', error);
+      Alert.alert('Error', 'Failed to attach document');
+    } finally {
+      setTimeout(() => {
+        setIsUploading(false);
+        setUploadProgress(0);
+      }, 500);
     }
   };
 
@@ -370,7 +436,18 @@ export const ChatScreen = ({ route, navigation }: any) => {
       if (uri) {
         const uploadFile = buildUploadFile(uri, 'voice.m4a', 'audio/mp4');
         console.log('Uploading voice message:', { uri, name: uploadFile.name, type: uploadFile.type });
-        const url = await storageService.uploadFile(uploadFile);
+        setIsUploading(true);
+        setUploadProgress(0.1);
+
+        // Progress simulation
+        const interval = setInterval(() => {
+          setUploadProgress(prev => Math.min(prev + 0.1, 0.9));
+        }, 300);
+
+        const url = await storageService.uploadFile(uploadFile, 'chat-media');
+        
+        clearInterval(interval);
+        setUploadProgress(1);
         await sendMessage('Voice message', url, 'text');
       }
     } catch (error: any) {
@@ -379,6 +456,10 @@ export const ChatScreen = ({ route, navigation }: any) => {
       setIsRecording(false);
       Alert.alert('Error', 'Failed to send voice message.');
     } finally {
+      setTimeout(() => {
+        setIsUploading(false);
+        setUploadProgress(0);
+      }, 500);
       isRecordingTransitionRef.current = false;
     }
   };
@@ -417,8 +498,8 @@ export const ChatScreen = ({ route, navigation }: any) => {
     return (
       <>
         <View style={styles.dateSeparator}>
-          <View style={[styles.datePill, { backgroundColor: 'rgba(255,255,255,0.1)' }]}>
-            <Text style={[styles.dateText, { color: 'rgba(255,255,255,0.5)' }]}>
+          <View style={[styles.datePill, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)', borderColor: colors.glassBorder, borderWidth: 0.5 }]}>
+            <Text style={[styles.dateText, { color: colors.gray }]}>
               {formatDateHeader(group.dateKey)}
             </Text>
           </View>
@@ -440,6 +521,9 @@ export const ChatScreen = ({ route, navigation }: any) => {
               content={msg.content}
               mediaUrl={msg.media_url}
               messageType={normalizeMessageType(msg.message_type, msg.media_url, msg.content)}
+              fileName={msg.file_name}
+              fileSize={msg.file_size}
+              mimeType={msg.mime_type}
               isMe={msg.sender_id === user!.id}
               timestamp={msg.created_at}
               delivered_at={msg.delivered_at}
@@ -466,6 +550,9 @@ export const ChatScreen = ({ route, navigation }: any) => {
       content={item.content}
       mediaUrl={item.media_url}
       messageType={normalizeMessageType(item.message_type, item.media_url, item.content)}
+      fileName={item.file_name}
+      fileSize={item.file_size}
+      mimeType={item.mime_type}
       isMe={item.sender_id === user!.id}
       timestamp={item.created_at}
       delivered_at={item.delivered_at}
@@ -499,9 +586,28 @@ export const ChatScreen = ({ route, navigation }: any) => {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Subtle background gradient */}
       <View style={StyleSheet.absoluteFill}>
-        <LinearGradient colors={chatBackground.gradient as any} start={{ x: 0.1, y: 0 }} end={{ x: 0.96, y: 1 }} style={StyleSheet.absoluteFill} />
-        <LinearGradient colors={[chatBackground.glows[0], chatBackground.glows[1], 'transparent'] as any} start={{ x: 1, y: 0 }} end={{ x: 0.12, y: 0.72 }} style={StyleSheet.absoluteFill} />
-        <LinearGradient colors={['transparent', chatBackground.glows[2], 'rgba(0,0,0,0.22)'] as any} start={{ x: 0, y: 0.24 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+        <LinearGradient 
+          colors={themeMode === 'mocha' ? (colors.gradientPrimary as any) : (chatBackground.gradient as any)} 
+          start={{ x: 0.1, y: 0 }} 
+          end={{ x: 0.96, y: 1 }} 
+          style={StyleSheet.absoluteFill} 
+        />
+        <LinearGradient 
+          colors={themeMode === 'mocha' 
+            ? ['rgba(118, 159, 205, 0.12)', 'rgba(185, 215, 234, 0.08)', 'transparent'] as any 
+            : [chatBackground.glows[0], chatBackground.glows[1], 'transparent'] as any} 
+          start={{ x: 1, y: 0 }} 
+          end={{ x: 0.12, y: 0.72 }} 
+          style={StyleSheet.absoluteFill} 
+        />
+        <LinearGradient 
+          colors={themeMode === 'mocha' 
+            ? ['transparent', 'rgba(118, 159, 205, 0.1)', isDark ? 'rgba(0,0,0,0.22)' : 'rgba(255,255,255,0.4)'] as any 
+            : ['transparent', chatBackground.glows[2], 'rgba(0,0,0,0.22)'] as any} 
+          start={{ x: 0, y: 0.24 }} 
+          end={{ x: 1, y: 1 }} 
+          style={StyleSheet.absoluteFill} 
+        />
         {backgroundSettings.background_image_url && (
           <Image
             source={{ uri: backgroundSettings.background_image_url }}
@@ -683,7 +789,7 @@ export const ChatScreen = ({ route, navigation }: any) => {
             intensity={colors.glassBlur + 10}
             tint={isDark ? 'dark' : 'light'}
             style={[styles.inputBar, {
-              backgroundColor: 'rgba(255,255,255,0.08)',
+              backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.4)',
               borderColor: colors.glassBorder,
               borderWidth: colors.borderWidth,
             }]}
@@ -697,7 +803,7 @@ export const ChatScreen = ({ route, navigation }: any) => {
               <TextInput
                 style={[styles.inputField, { color: colors.text }]}
                 placeholder="Message"
-                placeholderTextColor="rgba(255,255,255,0.48)"
+                placeholderTextColor={isDark ? 'rgba(255,255,255,0.48)' : 'rgba(17, 45, 78, 0.4)'}
                 value={input}
                 onChangeText={handleTyping}
                 multiline
@@ -721,6 +827,29 @@ export const ChatScreen = ({ route, navigation }: any) => {
           </BlurView>
         </View>
       </KeyboardAvoidingView>
+
+      {/* Upload Progress Overlay */}
+      {isUploading && (
+        <View style={styles.uploadOverlay}>
+          <BlurView intensity={80} tint={isDark ? 'dark' : 'light'} style={styles.uploadCard}>
+            <Text style={[styles.uploadTitle, { color: colors.text }]}>Transferring File...</Text>
+            <View style={[styles.progressTrack, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }]}>
+              <Animated.View 
+                style={[
+                  styles.progressFill, 
+                  { 
+                    backgroundColor: colors.primary,
+                    width: `${Math.round(uploadProgress * 100)}%` 
+                  }
+                ]} 
+              />
+            </View>
+            <Text style={[styles.progressText, { color: colors.gray }]}>
+              {Math.round(uploadProgress * 100)}%
+            </Text>
+          </BlurView>
+        </View>
+      )}
     </View>
   );
 };
@@ -741,7 +870,7 @@ const styles = StyleSheet.create({
   statusTxt: { fontSize: 12, fontWeight: '500' },
   offlineStatus: { opacity: 0.5 },
   headerActions: { flexDirection: 'row', gap: 2 },
-  actionIcon: { width: 40, height: 40, borderRadius: 18, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.08)', borderWidth: 0.5 },
+  actionIcon: { width: 40, height: 40, borderRadius: 18, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(128,128,128,0.08)', borderWidth: 0.5 },
 
   // Search bar
   searchBarRow: { paddingHorizontal: 12, paddingBottom: 10 },
@@ -789,4 +918,12 @@ const styles = StyleSheet.create({
   // Search empty
   searchEmpty: { alignItems: 'center', justifyContent: 'center', paddingVertical: 60, gap: 12, opacity: 0.6 },
   searchEmptyText: { fontSize: 15, textAlign: 'center' },
+
+  // Upload Progress
+  uploadOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.3)', zIndex: 100, justifyContent: 'center', alignItems: 'center' },
+  uploadCard: { width: 280, borderRadius: 24, padding: 24, alignItems: 'center', overflow: 'hidden' },
+  uploadTitle: { fontSize: 16, fontWeight: '700', marginBottom: 16 },
+  progressTrack: { width: '100%', height: 6, borderRadius: 3, overflow: 'hidden', marginBottom: 8 },
+  progressFill: { height: '100%', borderRadius: 3 },
+  progressText: { fontSize: 14, fontWeight: '600' },
 });

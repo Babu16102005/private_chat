@@ -2,11 +2,11 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, TextInput, SafeAreaView, ActivityIndicator, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Search, Plus, MessageCircle, X, Check, CheckCheck, Settings } from 'lucide-react-native';
+import { Search, Plus, MessageCircle, X, Check, CheckCheck, Settings, CirclePlus } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { useAuth } from '../context/AuthContext';
-import { inviteService, messageService } from '../services/supabaseService';
+import { inviteService, messageService, storyService } from '../services/supabaseService';
 import { supabase } from '../services/supabase';
 import { useTheme } from '../context/ThemeContext';
 
@@ -22,6 +22,7 @@ export const HomeScreen = ({ navigation }: any) => {
   const [search, setSearch] = useState('');
   const [onlineStatus, setOnlineStatus] = useState<Record<string, boolean>>({});
   const [typingStatus, setTypingStatus] = useState<Record<string, boolean>>({});
+  const [stories, setStories] = useState<any[]>([]);
 
   // Track active subscriptions by pair ID to prevent duplicates
   const subscriptionsRef = useRef<Map<string, any[]>>(new Map());
@@ -103,20 +104,34 @@ export const HomeScreen = ({ navigation }: any) => {
     }
   }, [user]);
 
+  const fetchStories = useCallback(async () => {
+    const data = await storyService.getStories();
+    if (isMountedRef.current) setStories(data || []);
+  }, []);
+
   // Fetch chats when user becomes available
   useEffect(() => {
     if (user?.id) {
       fetchChats();
+      fetchStories();
     }
-  }, [user?.id, fetchChats]);
+  }, [user?.id, fetchChats, fetchStories]);
 
   useFocusEffect(
     useCallback(() => {
       if (user?.id) {
         fetchChats();
+        fetchStories();
       }
-    }, [fetchChats, user?.id])
+    }, [fetchChats, fetchStories, user?.id])
   );
+
+  useEffect(() => {
+    const channel = storyService.subscribeToStories(fetchStories);
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [fetchStories]);
 
   // Manage subscriptions when chats change - only setup new, remove stale
   useEffect(() => {
@@ -165,7 +180,7 @@ export const HomeScreen = ({ navigation }: any) => {
         onPress={() => navigation.navigate('Chat', { pairId: item.id, partner })}
         activeOpacity={0.78}
       >
-        <BlurView intensity={colors.glassBlur + 14} tint="dark" style={[styles.chatRow, { borderColor: colors.glassBorder, borderWidth: colors.borderWidth }]}>
+        <BlurView intensity={colors.glassBlur + 14} tint={isDark ? 'dark' : 'light'} style={[styles.chatRow, { borderColor: colors.glassBorder, borderWidth: colors.borderWidth }]}>
           <LinearGradient colors={['rgba(255,255,255,0.1)', 'rgba(255,255,255,0.02)'] as any} style={StyleSheet.absoluteFill} />
           <View style={styles.chatThumbWrap}>
             <View style={[styles.chatThumbGlass, { borderColor: colors.glassBorder }]}>
@@ -231,6 +246,45 @@ export const HomeScreen = ({ navigation }: any) => {
     );
   };
 
+  const renderStories = () => {
+    const mine = stories.filter((story) => story.user_id === user.id);
+    const others = stories.filter((story) => story.user_id !== user.id);
+
+    return (
+      <View style={styles.storiesWrap}>
+        <FlatList
+          horizontal
+          data={[{ id: 'create-story', create: true }, ...mine, ...others]}
+          keyExtractor={(item) => item.id}
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.storiesList}
+          renderItem={({ item }) => {
+            if (item.create) {
+              return (
+                <TouchableOpacity style={styles.storyItem} onPress={() => navigation.navigate('CreateStory')}>
+                  <View style={[styles.storyRing, { borderColor: colors.primary }]}> 
+                    <CirclePlus size={30} color={colors.primary} />
+                  </View>
+                  <Text style={[styles.storyName, { color: colors.gray }]} numberOfLines={1}>Your story</Text>
+                </TouchableOpacity>
+              );
+            }
+            const seed = item.user?.name || item.user?.email || 'Story';
+            const avatarSource = item.user?.avatar_url ? { uri: item.user.avatar_url } : { uri: `https://api.dicebear.com/7.x/avataaars/svg?seed=${seed}` };
+            return (
+              <TouchableOpacity style={styles.storyItem} onPress={() => navigation.navigate('StoryViewer', { story: item })}>
+                <LinearGradient colors={colors.gradientSecondary as any} style={styles.storyRing}>
+                  <Image source={item.media_type === 'image' ? { uri: item.media_url } : avatarSource} style={styles.storyThumb} />
+                </LinearGradient>
+                <Text style={[styles.storyName, { color: colors.gray }]} numberOfLines={1}>{item.user_id === user.id ? 'You' : item.user?.name || 'Story'}</Text>
+              </TouchableOpacity>
+            );
+          }}
+        />
+      </View>
+    );
+  };
+
   if (loading) {
     return (
       <View style={[styles.container, { backgroundColor: colors.background, justifyContent: 'center', alignItems: 'center' }]}>
@@ -245,7 +299,7 @@ export const HomeScreen = ({ navigation }: any) => {
       <View style={StyleSheet.absoluteFill}>
         <LinearGradient colors={colors.gradientPrimary as any} start={{ x: 0.08, y: 0 }} end={{ x: 0.95, y: 1 }} style={StyleSheet.absoluteFill} />
         <LinearGradient colors={['rgba(100,243,255,0.11)', 'rgba(233,199,255,0.06)', 'transparent'] as any} start={{ x: 1, y: 0 }} end={{ x: 0.12, y: 0.72 }} style={StyleSheet.absoluteFill} />
-        <LinearGradient colors={['transparent', 'rgba(141,255,213,0.07)', 'rgba(5,7,18,0.24)'] as any} start={{ x: 0, y: 0.22 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+        <LinearGradient colors={['transparent', 'rgba(141,255,213,0.07)', isDark ? 'rgba(5,7,18,0.24)' : 'rgba(118,159,205,0.15)'] as any} start={{ x: 0, y: 0.22 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
       </View>
 
       <SafeAreaView style={styles.safe}>
@@ -271,7 +325,7 @@ export const HomeScreen = ({ navigation }: any) => {
 
         {/* Search bar */}
         <View style={styles.searchWrapper}>
-          <BlurView intensity={colors.glassBlur + 18} tint={isDark ? 'dark' : 'light'} style={[styles.searchBar, { backgroundColor: 'rgba(255,255,255,0.1)', borderColor: colors.glassBorder, borderRadius: 22, borderWidth: colors.borderWidth }]}> 
+          <BlurView intensity={colors.glassBlur + 18} tint={isDark ? 'dark' : 'light'} style={[styles.searchBar, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(128,128,128,0.03)', borderColor: colors.glassBorder, borderRadius: 22, borderWidth: colors.borderWidth }]}> 
             <Search size={18} color={colors.gray} style={{ marginRight: 8 }} />
             <TextInput
               style={[styles.searchInput, { color: colors.text }]}
@@ -288,6 +342,8 @@ export const HomeScreen = ({ navigation }: any) => {
             )}
           </BlurView>
         </View>
+
+        {renderStories()}
 
         {/* Chat list */}
         <View style={styles.listContainer}>
@@ -314,13 +370,19 @@ export const HomeScreen = ({ navigation }: any) => {
 
       {/* FAB */}
       <TouchableOpacity
-        style={[styles.floatPlus, { bottom: Math.max(insets.bottom + 20, 30) }]}
+        style={[styles.floatPlus, { 
+          bottom: Math.max(insets.bottom + 20, 30),
+          borderColor: isDark ? 'rgba(255,255,255,0.2)' : colors.primary,
+          borderWidth: 1.5,
+          shadowColor: isDark ? colors.primary : 'rgba(0,0,0,0.1)'
+        }]}
         onPress={() => navigation.navigate('Invite')}
+        activeOpacity={0.8}
       >
-        <LinearGradient colors={colors.gradientSecondary as any} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.floatGrad}>
-          <LinearGradient colors={['rgba(255,255,255,0.7)', 'rgba(255,255,255,0)'] as any} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0.7 }} style={styles.floatShine} />
-          <Plus size={28} color="white" strokeWidth={2.5} />
-        </LinearGradient>
+        <BlurView intensity={colors.glassBlur + 40} tint={isDark ? 'dark' : 'light'} style={styles.floatBlur}>
+          <View style={[StyleSheet.absoluteFill, { backgroundColor: isDark ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.3)' }]} />
+          <Plus size={32} color={isDark ? 'white' : colors.primary} strokeWidth={3} />
+        </BlurView>
       </TouchableOpacity>
     </View>
   );
@@ -332,20 +394,26 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 25, paddingTop: 32, paddingBottom: 18 },
   headerTitle: { fontSize: 32, lineHeight: 38, fontWeight: '800' },
   headerRight: { flexDirection: 'row', gap: 10, alignItems: 'center', height: 38 },
-  themeToggle: { width: 56, height: 30, borderRadius: 15, borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.2)', overflow: 'hidden', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 8, backgroundColor: 'rgba(255,255,255,0.08)', shadowColor: '#E9C7FF', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.22, shadowRadius: 16, elevation: 6 },
+  themeToggle: { width: 56, height: 30, borderRadius: 15, borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.2)', overflow: 'hidden', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 8, backgroundColor: 'rgba(128,128,128,0.08)' },
   themeToggleLabel: { fontSize: 11, fontWeight: '900', zIndex: 2, letterSpacing: 0.3 },
   themeToggleKnob: { position: 'absolute', left: 3, width: 24, height: 24, borderRadius: 12, zIndex: 1, shadowColor: '#64F3FF', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.26, shadowRadius: 8, elevation: 4 },
-  settingsButton: { width: 36, height: 36, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.1)', shadowColor: '#E9C7FF', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.24, shadowRadius: 20, elevation: 7 },
+  settingsButton: { width: 36, height: 36, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(128,128,128,0.1)', borderWidth: 0.5 },
   searchWrapper: { paddingHorizontal: 20, marginBottom: 20 },
   searchBar: { height: 50, borderRadius: 20, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, overflow: 'hidden' },
   searchInput: { flex: 1, fontSize: 15 },
+  storiesWrap: { marginTop: -6, marginBottom: 16 },
+  storiesList: { paddingHorizontal: 16, gap: 12 },
+  storyItem: { width: 72, alignItems: 'center' },
+  storyRing: { width: 64, height: 64, borderRadius: 24, borderWidth: 2, alignItems: 'center', justifyContent: 'center', padding: 3, overflow: 'hidden' },
+  storyThumb: { width: 56, height: 56, borderRadius: 21 },
+  storyName: { fontSize: 11, fontWeight: '700', marginTop: 6, maxWidth: 72 },
   listContainer: { flex: 1 },
   listInside: { paddingBottom: 100, paddingTop: 2 },
   chatRowTouch: { marginHorizontal: 14, marginBottom: 12, borderRadius: 28 },
   chatRow: { flexDirection: 'row', padding: 16, alignItems: 'center', paddingHorizontal: 18, borderRadius: 28, overflow: 'hidden' },
   chatRowFrost: { ...StyleSheet.absoluteFillObject, backgroundColor: 'transparent' },
   chatThumbWrap: { position: 'relative' },
-  chatThumbGlass: { width: 62, height: 62, borderRadius: 31, padding: 3, backgroundColor: 'rgba(255,255,255,0.08)', borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.18)' },
+  chatThumbGlass: { width: 62, height: 62, borderRadius: 31, padding: 3, backgroundColor: 'rgba(128,128,128,0.06)', borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.18)' },
   chatThumb: { width: 56, height: 56 },
   onlineIndicator: { position: 'absolute', bottom: 1, right: 1, width: 15, height: 15, borderRadius: 8, borderWidth: 2 },
   chatMain: { flex: 1, marginLeft: 14 },
@@ -362,7 +430,7 @@ const styles = StyleSheet.create({
   emptyWrap: { height: 250, justifyContent: 'center', alignItems: 'center', gap: 10 },
   emptyLabel: { fontSize: 16, fontWeight: '600' },
   emptySublabel: { fontSize: 14, textAlign: 'center', paddingHorizontal: 40 },
-  floatPlus: { position: 'absolute', right: 20, width: 60, height: 60, borderRadius: 30, borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.2)', backgroundColor: 'rgba(255,255,255,0.15)', shadowColor: '#E9C7FF', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.38, shadowRadius: 24, elevation: 10 },
-  floatGrad: { flex: 1, borderRadius: 30, justifyContent: 'center', alignItems: 'center' },
-  floatShine: { position: 'absolute', top: 2, left: 9, right: 9, height: 20, borderRadius: 999, opacity: 0.34 },
+  floatPlus: { position: 'absolute', right: 20, width: 64, height: 64, borderRadius: 100, overflow: 'hidden', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.3, shadowRadius: 12 },
+  floatBlur: { flex: 1, borderRadius: 100, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
+  liquidShine: { position: 'absolute', top: 0, left: 0, right: 0, height: '45%', opacity: 0.4 },
 });
