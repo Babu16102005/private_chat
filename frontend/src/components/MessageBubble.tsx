@@ -29,6 +29,7 @@ interface MessageBubbleProps {
   fileName?: string;
   fileSize?: number | null;
   mimeType?: string | null;
+  audioDurationMs?: number | null;
   replyToMessage?: ReplyToMessage | null;
   onImageTap?: (uri: string) => void;
   onMediaTap?: (uri: string, type: 'image' | 'video' | 'audio') => void;
@@ -44,6 +45,31 @@ const getMediaExtension = (uri: string, messageType?: string) => {
   if (ext && ext.length <= 5 && /^[a-z0-9]+$/.test(ext)) return ext;
   return messageType === 'video' ? 'mp4' : 'jpg';
 };
+
+const getWebAudioDuration = (uri: string) => new Promise<number>((resolve) => {
+  if (Platform.OS !== 'web' || typeof document === 'undefined') {
+    resolve(0);
+    return;
+  }
+
+  const audio = document.createElement('audio');
+  const cleanup = () => {
+    audio.removeAttribute('src');
+    audio.load();
+  };
+
+  audio.preload = 'metadata';
+  audio.onloadedmetadata = () => {
+    const seconds = Number.isFinite(audio.duration) ? audio.duration : 0;
+    cleanup();
+    resolve(Math.round(seconds * 1000));
+  };
+  audio.onerror = () => {
+    cleanup();
+    resolve(0);
+  };
+  audio.src = uri;
+});
 
 interface TextPart {
   type: 'text' | 'url';
@@ -76,7 +102,7 @@ function parseTextWithLinks(text: string): TextPart[] {
 export const MessageBubble: React.FC<MessageBubbleProps> = memo(
   function MessageBubble({
     content, isMe, timestamp, delivered_at, read_at,
-    onDelete, onReply, mediaUrl, messageType, fileName, fileSize, mimeType,
+    onDelete, onReply, mediaUrl, messageType, fileName, fileSize, mimeType, audioDurationMs,
     replyToMessage, onImageTap, onMediaTap,
   }) {
     const { colors, isDark } = useTheme();
@@ -88,6 +114,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = memo(
     const soundRef = useRef<Audio.Sound | null>(null);
 
     const normalizedMessageType = messageType === 'voice' ? 'audio' : messageType;
+    const displayDuration = duration || audioDurationMs || 0;
 
     const isEmojiOnly = content
       ? /^[\p{Emoji_Presentation}\p{Extended_Pictographic}]{1,8}$/u.test(content.trim())
@@ -253,6 +280,38 @@ export const MessageBubble: React.FC<MessageBubbleProps> = memo(
       };
     }, []);
 
+    useEffect(() => {
+      let isMounted = true;
+      if (normalizedMessageType !== 'audio' || !mediaUrl || audioDurationMs || duration > 0) return;
+
+      const loadDuration = async () => {
+        try {
+          if (Platform.OS === 'web') {
+            const nextDuration = await getWebAudioDuration(mediaUrl);
+            if (isMounted && nextDuration > 0) setDuration(nextDuration);
+            return;
+          }
+
+          const { sound, status } = await Audio.Sound.createAsync(
+            { uri: mediaUrl },
+            { shouldPlay: false }
+          );
+          if (status.isLoaded && status.durationMillis && isMounted) {
+            setDuration(status.durationMillis);
+          }
+          await sound.unloadAsync();
+        } catch (error) {
+          console.warn('Failed to load audio duration:', error);
+        }
+      };
+
+      loadDuration();
+
+      return () => {
+        isMounted = false;
+      };
+    }, [audioDurationMs, duration, mediaUrl, normalizedMessageType]);
+
     const renderQuotedMessage = () => {
       if (!replyToMessage) return null;
       return (
@@ -299,7 +358,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = memo(
       );
     };
 
-    const progressPercent = duration > 0 ? Math.min(progress / duration, 1) : 0;
+    const progressPercent = displayDuration > 0 ? Math.min(progress / displayDuration, 1) : 0;
 
     const formatFileSize = (size?: number | null) => {
       if (!size) return mimeType || 'Document';
@@ -381,12 +440,29 @@ export const MessageBubble: React.FC<MessageBubbleProps> = memo(
                   )}
                 </View>
                 <View style={styles.audioProgressWrap}>
-                  <View style={[styles.audioProgressTrack, { backgroundColor: isDark ? 'rgba(255,255,255,0.24)' : 'rgba(0,0,0,0.1)' }]}>
-                    <View style={[styles.audioProgressFill, { width: `${progressPercent * 100}%`, backgroundColor: isDark ? 'rgba(255,255,255,0.7)' : colors.primary }]} />
+                  <View style={styles.waveformRow}>
+                    {Array.from({ length: 18 }).map((_, index) => {
+                      const isFilled = progressPercent > index / 18;
+                      const height = 8 + ((index * 7) % 18);
+                      return (
+                        <View
+                          key={index}
+                          style={[
+                            styles.waveformBar,
+                            {
+                              height,
+                              backgroundColor: isFilled
+                                ? (isDark ? 'rgba(255,255,255,0.82)' : colors.primary)
+                                : (isDark ? 'rgba(255,255,255,0.28)' : 'rgba(0,0,0,0.18)'),
+                            },
+                          ]}
+                        />
+                      );
+                    })}
                   </View>
                 </View>
-                <Text style={[styles.audioDuration, { color: isMe ? 'rgba(255,255,255,0.6)' : 'rgba(255,255,255,0.8)' }]}>
-                  {duration > 0 ? formatTime(duration) : '--:--'}
+                <Text style={[styles.audioDuration, { color: isMe ? 'rgba(255,255,255,0.6)' : 'rgba(255,255,255,0.8)' }]}> 
+                  {displayDuration > 0 ? formatTime(displayDuration) : '0:00'}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -563,7 +639,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     borderWidth: 0.5,
     borderColor: 'rgba(255,255,255,0.2)',
-    minWidth: 160,
+    minWidth: 210,
   },
   playBtn: {
     width: 32,
@@ -577,19 +653,25 @@ const styles = StyleSheet.create({
     marginHorizontal: 10,
     height: 24,
     justifyContent: 'center',
+    minWidth: 90,
+    maxWidth: 118,
   },
-  audioProgressTrack: {
-    height: 3,
-    borderRadius: 1.5,
-    backgroundColor: 'rgba(255,255,255,0.24)',
+  waveformRow: {
+    height: 26,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
   },
-  audioProgressFill: {
-    height: 3,
-    borderRadius: 1.5,
-    backgroundColor: 'rgba(255,255,255,0.7)',
+  waveformBar: {
+    width: 3,
+    borderRadius: 2,
   },
   audioDuration: {
     fontSize: 12,
+    fontWeight: '700',
+    minWidth: 40,
+    textAlign: 'right',
+    flexShrink: 0,
   },
   documentCard: {
     flexDirection: 'row',

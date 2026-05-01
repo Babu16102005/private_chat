@@ -1,4 +1,5 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
+import { AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../services/supabase';
 import { authService, profileService } from '../services/supabaseService';
@@ -127,6 +128,21 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     };
   }, []);
 
+  useEffect(() => {
+    const userId = session?.user?.id;
+    if (!userId) return;
+
+    profileService.updateActiveStatus(userId, AppState.currentState === 'active');
+    const subscription = AppState.addEventListener('change', (state) => {
+      profileService.updateActiveStatus(userId, state === 'active');
+    });
+
+    return () => {
+      subscription.remove();
+      profileService.updateActiveStatus(userId, false);
+    };
+  }, [session?.user?.id]);
+
   const signUp = async (email: string, password: string, name?: string) => {
     const result = await authService.signUp(email, password);
     if (name && result?.user) {
@@ -142,6 +158,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const signOut = async () => {
     setLoading(true);
     try {
+      if (session?.user?.id) {
+        await profileService.updateActiveStatus(session.user.id, false);
+      }
       await authService.signOut();
     } catch (error) {
       console.warn('Sign out request failed; clearing local session anyway:', error);

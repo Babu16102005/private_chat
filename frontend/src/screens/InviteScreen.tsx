@@ -28,7 +28,7 @@ export const InviteScreen = () => {
       const pair = await inviteService.acceptInvite(token);
       if (pair && user) {
         Alert.alert('Connected!', 'You are now paired with your partner.');
-        const partner = pair.user_a?.id === user.id ? pair.user_b : pair.user_a;
+        const partner = pair.user_a_id === user.id ? pair.user_b : pair.user_a;
         navigation.replace('Chat', { pairId: pair.id, partner });
       } else { navigation.replace('Home'); }
     } catch (error: any) { handleError(error, 'Invite error'); }

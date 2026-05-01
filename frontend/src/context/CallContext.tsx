@@ -1,8 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
-import { Platform, Alert, PermissionsAndroid } from 'react-native';
+import { Platform, Alert, PermissionsAndroid, AppState } from 'react-native';
 import Constants from 'expo-constants';
 import { supabase } from '../services/supabase';
-import { messageService, notificationService } from '../services/supabaseService';
+import { callInviteService, messageService, notificationService } from '../services/supabaseService';
 import { useAuth } from './AuthContext';
 import { configureCallAudioMode, restoreDefaultAudioMode, startCallTone, stopCallTone } from '../utils/callAudio';
 import { buildCallSignalPayload, getCallSignalType, getCallTargetId } from '../utils/callSignaling';
@@ -162,9 +162,11 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isVideoCall, setIsVideoCall] = useState(false);
   const [remoteSdp, setRemoteSdp] = useState<any>(null);
   const [partnerTargetId, setPartnerTargetId] = useState<string | null>(null);
+  const [activeCallInviteId, setActiveCallInviteId] = useState<string | null>(null);
 
   const pc = useRef<any>(null);
   const inboundChannel = useRef<any>(null);
+  const callInviteChannel = useRef<any>(null);
   const outboundChannel = useRef<any>(null);
   const callStateRef = useRef<CallState>('IDLE');
   const pendingIceCandidates = useRef<any[]>([]);
@@ -173,6 +175,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const activePairIdRef = useRef<string | null>(null);
   const isVideoCallRef = useRef(false);
   const callLoggedRef = useRef(false);
+  const activeCallInviteIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     callStateRef.current = callState;
@@ -188,6 +191,10 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     isVideoCallRef.current = isVideoCall;
   }, [isVideoCall]);
+
+  useEffect(() => {
+    activeCallInviteIdRef.current = activeCallInviteId;
+  }, [activeCallInviteId]);
 
   const removeChannel = useCallback((channelRef: React.MutableRefObject<any>) => {
     if (channelRef.current) {
@@ -225,6 +232,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setPartnerInfo(null);
     setPartnerTargetId(null);
     setActivePairId(null);
+    setActiveCallInviteId(null);
     setIsMuted(false);
     setIsCameraOff(false);
     setIsVideoCall(false);
@@ -246,6 +254,27 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return null;
     });
   }, [removeChannel]);
+
+  const showIncomingCallInvite = useCallback((invite: any) => {
+    if (!invite || callStateRef.current !== 'IDLE') return;
+    if (new Date(invite.expires_at).getTime() <= Date.now()) {
+      callInviteService.updateCallInviteStatus(invite.id, 'missed').catch(() => {});
+      return;
+    }
+
+    const callerInfo = invite.caller_info || { id: invite.caller_id, name: 'Incoming call' };
+    setPartnerInfo(callerInfo);
+    setPartnerTargetId(invite.caller_id);
+    setActivePairId(invite.pair_id);
+    setActiveCallInviteId(invite.id);
+    setRemoteSdp(invite.offer_sdp);
+    setIsIncoming(true);
+    setIsVideoCall(!!invite.is_video);
+    setIsCameraOff(!invite.is_video);
+    setCallState('RINGING');
+    configureCallAudioMode(!!invite.is_video).catch((error) => console.warn('Failed to configure call audio:', error));
+    startCallTone('ringtone');
+  }, []);
 
   const logCallHistory = useCallback(async (status: 'completed' | 'missed' | 'rejected' | 'cancelled') => {
     const pairId = activePairIdRef.current;
@@ -350,6 +379,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setPartnerInfo(payload.senderInfo);
             setPartnerTargetId(payload.senderInfo?.id || null);
             setActivePairId(payload.pairId);
+            setActiveCallInviteId(payload.callInviteId || null);
             setRemoteSdp(payload.sdp);
             setIsIncoming(true);
             setIsVideoCall(!!payload.isVideo);
@@ -410,12 +440,34 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     inboundChannel.current = globalChannel;
 
+    callInviteService.getPendingCallInvite()
+      .then(showIncomingCallInvite)
+      .catch((error) => console.warn('Failed to load pending call invite:', error));
+
+    const inviteChannel = callInviteService.subscribeToIncomingCallInvites(user.id, (invite) => {
+      showIncomingCallInvite(invite);
+    });
+    callInviteChannel.current = inviteChannel;
+
+    const appStateSubscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        callInviteService.getPendingCallInvite()
+          .then(showIncomingCallInvite)
+          .catch((error) => console.warn('Failed to refresh pending call invite:', error));
+      }
+    });
+
     return () => {
       supabase.removeChannel(globalChannel);
       inboundChannel.current = null;
+      if (callInviteChannel.current) {
+        supabase.removeChannel(callInviteChannel.current);
+        callInviteChannel.current = null;
+      }
+      appStateSubscription.remove();
       cleanup();
     };
-  }, [cleanup, user]);
+  }, [cleanup, showIncomingCallInvite, user]);
 
   const setupPeerConnection = useCallback(async (partnerId: string, wantsVideo: boolean) => {
     if (!RTCPeerConnectionImpl || !mediaDevicesImpl?.getUserMedia) {
@@ -557,15 +609,19 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const offer = await pc.current.createOffer();
       await pc.current.setLocalDescription(offer);
 
+      const callerInfo = {
+        id: user.id,
+        name: user.email?.split('@')[0],
+        email: user.email,
+      };
+      const callInvite = await callInviteService.createCallInvite(pairId, targetUserId, isVideo, offer, callerInfo);
+      setActiveCallInviteId(callInvite.id);
       await sendSignal('call-offer', {
         sdp: offer,
-        senderInfo: {
-          id: user.id,
-          name: user.email?.split('@')[0],
-          email: user.email,
-        },
+        senderInfo: callerInfo,
         pairId,
         isVideo,
+        callInviteId: callInvite.id,
       });
       notificationService.sendCallPush(pairId, targetUserId, isVideo);
       startCallTone('ringback');
@@ -609,6 +665,9 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const answer = await pc.current.createAnswer();
       await pc.current.setLocalDescription(answer);
 
+      if (activeCallInviteIdRef.current) {
+        callInviteService.updateCallInviteStatus(activeCallInviteIdRef.current, 'accepted').catch((error) => console.warn('Failed to accept call invite:', error));
+      }
       await sendSignal('call-answer', { sdp: answer });
       stopCallTone();
       setCallState('CONNECTED');
@@ -630,6 +689,9 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.error('Failed to reject call:', error);
       }
     }
+    if (activeCallInviteIdRef.current) {
+      callInviteService.updateCallInviteStatus(activeCallInviteIdRef.current, 'rejected').catch((error) => console.warn('Failed to reject call invite:', error));
+    }
     await logCallHistory('rejected');
     cleanup();
   };
@@ -643,6 +705,10 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } catch (error) {
         console.error('Failed to end call:', error);
       }
+    }
+    if (activeCallInviteIdRef.current) {
+      const inviteStatus = callStateRef.current === 'CONNECTED' ? 'accepted' : 'cancelled';
+      callInviteService.updateCallInviteStatus(activeCallInviteIdRef.current, inviteStatus).catch((error) => console.warn('Failed to update call invite:', error));
     }
     await logCallHistory(callStateRef.current === 'CONNECTED' ? 'completed' : 'cancelled');
     cleanup();

@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, TextInput, SafeAreaView, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, TextInput, SafeAreaView, Animated, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Search, Plus, MessageCircle, X, Check, CheckCheck, Settings, CirclePlus } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { useAuth } from '../context/AuthContext';
-import { inviteService, messageService, storyService } from '../services/supabaseService';
+import { inviteService, messageService, profileService, storyService } from '../services/supabaseService';
 import { supabase } from '../services/supabase';
 import { useTheme } from '../context/ThemeContext';
 
@@ -23,6 +23,8 @@ export const HomeScreen = ({ navigation }: any) => {
   const [onlineStatus, setOnlineStatus] = useState<Record<string, boolean>>({});
   const [typingStatus, setTypingStatus] = useState<Record<string, boolean>>({});
   const [stories, setStories] = useState<any[]>([]);
+  const loadingPulse = useRef(new Animated.Value(0.45)).current;
+  const loadingOpacityStyle = { opacity: loadingPulse } as any;
 
   // Track active subscriptions by pair ID to prevent duplicates
   const subscriptionsRef = useRef<Map<string, any[]>>(new Map());
@@ -67,11 +69,21 @@ export const HomeScreen = ({ navigation }: any) => {
     }
 
     const subs: any[] = [];
-    const presenceChannel = messageService.subscribeToPresence(chat.id, userId, (isOnline: boolean) => {
-      if (isMountedRef.current) {
-        setOnlineStatus(prev => ({ ...prev, [chat.id]: isOnline }));
-      }
-    });
+    const partnerProfile = chat.partner || (chat.user_a_id === userId ? chat.user_b : chat.user_a);
+    const partnerId = partnerProfile?.id;
+
+    if (partnerId) {
+      setOnlineStatus(prev => ({ ...prev, [chat.id]: !!partnerProfile?.is_active }));
+
+      const activeStatusChannel = profileService.subscribeToActiveStatus(partnerId, (isActive: boolean) => {
+        if (isMountedRef.current) {
+          setOnlineStatus(prev => ({ ...prev, [chat.id]: isActive }));
+        }
+      });
+      subs.push(activeStatusChannel);
+    }
+
+    const presenceChannel = messageService.subscribeToPresence(chat.id, userId, () => {});
     subs.push(presenceChannel);
 
     const typingChannel = messageService.subscribeToTyping(chat.id, userId, (isTyping: boolean) => {
@@ -133,6 +145,21 @@ export const HomeScreen = ({ navigation }: any) => {
     };
   }, [fetchStories]);
 
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(loadingPulse, { toValue: 1, duration: 760, useNativeDriver: true }),
+        Animated.timing(loadingPulse, { toValue: 0.45, duration: 760, useNativeDriver: true }),
+      ])
+    );
+
+    if (loading) {
+      loop.start();
+    }
+
+    return () => loop.stop();
+  }, [loading, loadingPulse]);
+
   // Manage subscriptions when chats change - only setup new, remove stale
   useEffect(() => {
     if (!user?.id || chats.length === 0) return;
@@ -157,12 +184,12 @@ export const HomeScreen = ({ navigation }: any) => {
   if (!user) return null;
 
   const filteredChats = chats.filter(chat => {
-    const partner = chat.user_a?.id === user!.id ? chat.user_b : chat.user_a;
+    const partner = chat.partner || (chat.user_a_id === user!.id ? chat.user_b : chat.user_a);
     return (partner?.name || partner?.email || '').toLowerCase().includes(search.toLowerCase());
   });
 
   const renderChatItem = ({ item }: { item: any }) => {
-    const partner = item.user_a?.id === user!.id ? item.user_b : item.user_a;
+    const partner = item.partner || (item.user_a_id === user!.id ? item.user_b : item.user_a);
     const isOnline = onlineStatus[item.id];
     const isTyping = typingStatus[item.id];
     const avatarSeed = partner?.name || partner?.email || 'User';
@@ -287,8 +314,20 @@ export const HomeScreen = ({ navigation }: any) => {
 
   if (loading) {
     return (
-      <View style={[styles.container, { backgroundColor: colors.background, justifyContent: 'center', alignItems: 'center' }]}>
-        <ActivityIndicator size="large" color={colors.primary} />
+      <View style={[styles.container, { backgroundColor: colors.background }]}> 
+        <LinearGradient colors={colors.gradientPrimary as any} start={{ x: 0.08, y: 0 }} end={{ x: 0.95, y: 1 }} style={StyleSheet.absoluteFill} />
+        <LinearGradient colors={['rgba(100,243,255,0.12)', 'rgba(255,255,255,0.04)', 'transparent'] as any} start={{ x: 1, y: 0 }} end={{ x: 0.15, y: 0.7 }} style={StyleSheet.absoluteFill} />
+        <SafeAreaView style={styles.loadingSafe}>
+          {[0, 1, 2, 3].map((item) => (
+            <Animated.View key={item} style={[styles.loadingRow, { borderColor: colors.glassBorder }, loadingOpacityStyle]}> 
+              <View style={[styles.loadingAvatar, { backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.42)' }]} />
+              <View style={styles.loadingLines}>
+                <View style={[styles.loadingLineWide, { backgroundColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.48)' }]} />
+                <View style={[styles.loadingLineShort, { backgroundColor: isDark ? 'rgba(255,255,255,0.09)' : 'rgba(255,255,255,0.34)' }]} />
+              </View>
+            </Animated.View>
+          ))}
+        </SafeAreaView>
       </View>
     );
   }
@@ -313,9 +352,7 @@ export const HomeScreen = ({ navigation }: any) => {
               activeOpacity={0.82}
             >
               <LinearGradient colors={colors.gradientSecondary as any} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
-              <Text style={[styles.themeToggleLabel, { color: themeMode === 'obsidian' ? colors.text : colors.gray }]}>1</Text>
-              <Text style={[styles.themeToggleLabel, { color: themeMode === 'mocha' ? colors.text : colors.gray }]}>2</Text>
-              <View style={[styles.themeToggleKnob, { transform: [{ translateX: themeMode === 'obsidian' ? 0 : 24 }], backgroundColor: 'rgba(255,255,255,0.9)' }]} />
+              <View style={[styles.themeToggleKnob, { transform: [{ translateX: themeMode === 'obsidian' ? 0 : 18 }], backgroundColor: 'rgba(255,255,255,0.9)' }]} />
             </TouchableOpacity>
             <TouchableOpacity onPress={() => navigation.navigate('Profile')} style={[styles.settingsButton, { borderColor: colors.glassBorder, borderWidth: colors.borderWidth }]}>
               <Settings size={22} color={colors.text} />
@@ -391,12 +428,17 @@ export const HomeScreen = ({ navigation }: any) => {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   safe: { flex: 1 },
+  loadingSafe: { flex: 1, justifyContent: 'center', paddingHorizontal: 20 },
+  loadingRow: { height: 82, borderRadius: 28, borderWidth: 0.5, backgroundColor: 'rgba(255,255,255,0.09)', flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, marginBottom: 12 },
+  loadingAvatar: { width: 54, height: 54, borderRadius: 24 },
+  loadingLines: { flex: 1, marginLeft: 14, gap: 10 },
+  loadingLineWide: { width: '74%', height: 13, borderRadius: 7 },
+  loadingLineShort: { width: '48%', height: 11, borderRadius: 6 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 25, paddingTop: 32, paddingBottom: 18 },
   headerTitle: { fontSize: 32, lineHeight: 38, fontWeight: '800' },
   headerRight: { flexDirection: 'row', gap: 10, alignItems: 'center', height: 38 },
-  themeToggle: { width: 56, height: 30, borderRadius: 15, borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.2)', overflow: 'hidden', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 8, backgroundColor: 'rgba(128,128,128,0.08)' },
-  themeToggleLabel: { fontSize: 11, fontWeight: '900', zIndex: 2, letterSpacing: 0.3 },
-  themeToggleKnob: { position: 'absolute', left: 3, width: 24, height: 24, borderRadius: 12, zIndex: 1, shadowColor: '#64F3FF', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.26, shadowRadius: 8, elevation: 4 },
+  themeToggle: { width: 46, height: 26, borderRadius: 13, borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.2)', overflow: 'hidden', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(128,128,128,0.08)' },
+  themeToggleKnob: { position: 'absolute', left: 3, width: 20, height: 20, borderRadius: 10, zIndex: 1, shadowColor: '#64F3FF', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.26, shadowRadius: 8, elevation: 4 },
   settingsButton: { width: 36, height: 36, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(128,128,128,0.1)', borderWidth: 0.5 },
   searchWrapper: { paddingHorizontal: 20, marginBottom: 20 },
   searchBar: { height: 50, borderRadius: 20, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, overflow: 'hidden' },

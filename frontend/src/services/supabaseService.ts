@@ -17,6 +17,7 @@ export type SendMessageOptions = {
   fileName?: string;
   fileSize?: number;
   mimeType?: string;
+  audioDurationMs?: number;
   callStartedAt?: string;
   callEndedAt?: string;
   callDurationSeconds?: number;
@@ -62,6 +63,12 @@ const buildMessageNotificationBody = (content: string, messageType: string) => {
   if (messageType === 'encrypted') return 'Sent you an encrypted message';
   if (messageType === 'audio' || messageType === 'voice') return 'Sent you a voice message';
   return content || 'Sent you a message';
+};
+
+const getPartnerFromPair = (pair: any, userId: string) => {
+  if (pair.user_a_id === userId) return pair.user_b;
+  if (pair.user_b_id === userId) return pair.user_a;
+  return null;
 };
 
 export const notificationService = {
@@ -110,13 +117,76 @@ export const notificationService = {
   },
 };
 
+export const callInviteService = {
+  async createCallInvite(pairId: string, calleeId: string, isVideo: boolean, offerSdp: any, callerInfo: Record<string, any>) {
+    const user = await authService.getCurrentUser();
+    if (!user) throw new Error('Auth required');
+
+    const expiresAt = new Date(Date.now() + 45_000).toISOString();
+    const { data, error } = await supabase
+      .from('call_invites')
+      .insert({
+        pair_id: pairId,
+        caller_id: user.id,
+        callee_id: calleeId,
+        is_video: isVideo,
+        offer_sdp: offerSdp,
+        caller_info: callerInfo,
+        expires_at: expiresAt,
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  },
+
+  async getPendingCallInvite() {
+    const user = await authService.getCurrentUser();
+    if (!user) return null;
+
+    const { data, error } = await supabase
+      .from('call_invites')
+      .select('*')
+      .eq('callee_id', user.id)
+      .eq('status', 'ringing')
+      .gt('expires_at', new Date().toISOString())
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) throw error;
+    return data;
+  },
+
+  async updateCallInviteStatus(inviteId: string, status: 'accepted' | 'rejected' | 'missed' | 'cancelled') {
+    const { error } = await supabase
+      .from('call_invites')
+      .update({ status, updated_at: new Date().toISOString() })
+      .eq('id', inviteId);
+
+    if (error) throw error;
+  },
+
+  subscribeToIncomingCallInvites(userId: string, callback: (invite: any) => void) {
+    return supabase
+      .channel(`call-invites:${userId}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'call_invites', filter: `callee_id=eq.${userId}` },
+        (payload) => callback(payload.new)
+      )
+      .subscribe();
+  },
+};
+
 // Authentication Services
 export const authService = {
   async signUp(email: string, password: string) {
     try {
       const { data, error } = await supabase.auth.signUp({ email, password });
       if (error) throw error;
-      return data;
+      return data ? { ...data, partner: getPartnerFromPair(data, user.id) } : null;
     } catch (error) {
       handleError(error, 'Sign up failed');
       throw error;
@@ -211,6 +281,34 @@ export const profileService = {
     } catch (error) {
       return null;
     }
+  },
+
+  async updateActiveStatus(userId: string, isActive: boolean) {
+    try {
+      const { error } = await supabase
+        .from('users')
+        .update({
+          is_active: isActive,
+          last_seen: new Date().toISOString(),
+        })
+        .eq('id', userId);
+      if (error) throw error;
+    } catch (error) {
+      console.warn('updateActiveStatus error:', error);
+    }
+  },
+
+  subscribeToActiveStatus(userId: string, callback: (isActive: boolean) => void) {
+    const channel = supabase
+      .channel(`user-active-status:${userId}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'users', filter: `id=eq.${userId}` },
+        (payload) => callback(!!payload.new?.is_active)
+      )
+      .subscribe();
+
+    return channel;
   }
 };
 
@@ -336,7 +434,7 @@ export const inviteService = {
           const visibleMessages = (p.messages || []).filter((m: any) => !deletedIds.has(m.id));
           const sortedMsgs = visibleMessages.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
           const unread = visibleMessages.filter((m: any) => m.sender_id !== user.id && !m.read_at).length;
-          return { ...p, messages: visibleMessages, last_message: sortedMsgs[0] || null, unread_count: unread };
+          return { ...p, partner: getPartnerFromPair(p, user.id), messages: visibleMessages, last_message: sortedMsgs[0] || null, unread_count: unread };
       });
     } catch (error) {
       console.error('getMyPairs error:', error);
@@ -403,6 +501,7 @@ export const messageService = {
       if (options.fileName) payload.file_name = options.fileName;
       if (options.fileSize !== undefined) payload.file_size = options.fileSize;
       if (options.mimeType) payload.mime_type = options.mimeType;
+      if (options.audioDurationMs !== undefined) payload.audio_duration_ms = options.audioDurationMs;
       if (options.callStartedAt) payload.call_started_at = options.callStartedAt;
       if (options.callEndedAt) payload.call_ended_at = options.callEndedAt;
       if (options.callDurationSeconds !== undefined) payload.call_duration_seconds = options.callDurationSeconds;
@@ -450,6 +549,19 @@ export const messageService = {
     }
   },
 
+  async markMessagesAsRead(messageIds: string[]) {
+    if (messageIds.length === 0) return;
+
+    try {
+      await supabase
+        .from('messages')
+        .update({ read_at: new Date().toISOString() })
+        .in('id', messageIds);
+    } catch (error) {
+      console.error('markMessagesAsRead error:', error);
+    }
+  },
+
   async markMessagesAsDelivered(messageIds: string[]) {
     try {
       await supabase.from('messages').update({ delivered_at: new Date().toISOString() }).in('id', messageIds);
@@ -479,12 +591,20 @@ export const messageService = {
 
   subscribeToPresence(pairId: string, userId: string, callback: (isOnline: boolean) => void) {
     const channel = supabase.channel(`presence:${pairId}`);
-    channel.on('presence', { event: 'sync' }, () => {
-        const state = channel.presenceState();
-        const partner = Object.values(state).flat().find((p: any) => p.user_id !== userId);
-        callback(!!partner);
-    }).subscribe(async (s) => {
-        if (s === 'SUBSCRIBED') await channel.track({ user_id: userId, online_at: new Date().toISOString() });
+    const syncOnlineState = () => {
+      const state = channel.presenceState();
+      const partner = Object.values(state).flat().find((p: any) => p.user_id !== userId && p.is_active !== false);
+      callback(!!partner);
+    };
+
+    channel
+      .on('presence', { event: 'sync' }, syncOnlineState)
+      .on('presence', { event: 'join' }, syncOnlineState)
+      .on('presence', { event: 'leave' }, syncOnlineState)
+      .subscribe(async (s) => {
+        if (s === 'SUBSCRIBED') {
+          await channel.track({ user_id: userId, is_active: true, online_at: new Date().toISOString() });
+        }
     });
     return channel;
   },
@@ -733,6 +853,19 @@ export const storyService = {
       .single();
     if (error) throw error;
     return data;
+  },
+
+  async deleteStory(storyId: string) {
+    const user = await authService.getCurrentUser();
+    if (!user) throw new Error('Auth required');
+
+    const { error } = await supabase
+      .from('stories')
+      .delete()
+      .eq('id', storyId)
+      .eq('user_id', user.id);
+
+    if (error) throw error;
   },
 
   async markViewed(storyId: string) {

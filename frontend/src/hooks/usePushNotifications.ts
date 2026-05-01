@@ -115,7 +115,7 @@ const handleNotificationResponse = async (
     const senderId = data.senderId || data.callerId;
     const partner = senderId
       ? senderId === pair.user_a_id ? pair.user_a : pair.user_b
-      : pair.user_a || pair.user_b;
+      : pair.partner || pair.user_a || pair.user_b;
 
     navigate('Chat', { pairId, partner });
   } catch (error) {

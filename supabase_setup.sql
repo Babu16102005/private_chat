@@ -17,6 +17,8 @@ CREATE TABLE IF NOT EXISTS public.users (
   avatar_url  TEXT,
   push_token  TEXT,
   about       TEXT        DEFAULT 'Hey there! I am using CoupleChat',
+  is_active   BOOLEAN     DEFAULT FALSE,
+  last_seen   TIMESTAMPTZ,
   created_at  TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -32,6 +34,7 @@ CREATE TABLE IF NOT EXISTS public.invites (
 );
 
 CREATE INDEX IF NOT EXISTS idx_invites_email ON public.invites(invitee_email);
+CREATE INDEX IF NOT EXISTS idx_users_active_last_seen ON public.users(is_active, last_seen DESC);
 
 -- Pairs: active chat connections between two users
 CREATE TABLE IF NOT EXISTS public.pairs (
@@ -55,6 +58,7 @@ CREATE TABLE IF NOT EXISTS public.messages (
   file_name            TEXT,
   file_size            BIGINT,
   mime_type            TEXT,
+  audio_duration_ms    INTEGER,
   call_started_at      TIMESTAMPTZ,
   call_ended_at        TIMESTAMPTZ,
   call_duration_seconds INTEGER,
@@ -139,6 +143,24 @@ CREATE TABLE IF NOT EXISTS public.chat_settings (
 
 CREATE INDEX IF NOT EXISTS idx_chat_settings_pair_user ON public.chat_settings(pair_id, user_id);
 
+-- Call Invites: durable incoming call indicators for offline/background users
+CREATE TABLE IF NOT EXISTS public.call_invites (
+  id          UUID        DEFAULT gen_random_uuid() PRIMARY KEY,
+  pair_id     UUID        REFERENCES public.pairs(id) ON DELETE CASCADE NOT NULL,
+  caller_id   UUID        REFERENCES public.users(id) ON DELETE CASCADE NOT NULL,
+  callee_id   UUID        REFERENCES public.users(id) ON DELETE CASCADE NOT NULL,
+  is_video    BOOLEAN     DEFAULT FALSE NOT NULL,
+  status      TEXT        DEFAULT 'ringing' CHECK (status IN ('ringing', 'accepted', 'rejected', 'missed', 'cancelled')),
+  offer_sdp   JSONB,
+  caller_info JSONB,
+  expires_at  TIMESTAMPTZ NOT NULL DEFAULT (NOW() + INTERVAL '45 seconds'),
+  created_at  TIMESTAMPTZ DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_call_invites_callee_status ON public.call_invites(callee_id, status, expires_at DESC);
+CREATE INDEX IF NOT EXISTS idx_call_invites_pair_created ON public.call_invites(pair_id, created_at DESC);
+
 
 -- ============================================================================
 -- PART 2: FUNCTIONS & TRIGGERS
@@ -186,6 +208,7 @@ ALTER TABLE public.chat_settings     ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.stories           ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.story_views       ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_crypto_keys  ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.call_invites      ENABLE ROW LEVEL SECURITY;
 
 -- ── users ──────────────────────────────────────────────────────────────────
 DROP POLICY IF EXISTS "View relevant profiles" ON public.users;
@@ -212,6 +235,30 @@ CREATE POLICY "Create own pairs" ON public.pairs
 DROP POLICY IF EXISTS "Update own pairs" ON public.pairs;
 CREATE POLICY "Update own pairs" ON public.pairs
   FOR UPDATE USING (auth.uid() = user_a_id OR auth.uid() = user_b_id);
+
+-- ── call_invites ───────────────────────────────────────────────────────────
+DROP POLICY IF EXISTS "View own call invites" ON public.call_invites;
+CREATE POLICY "View own call invites" ON public.call_invites
+  FOR SELECT USING (auth.uid() = caller_id OR auth.uid() = callee_id);
+
+DROP POLICY IF EXISTS "Create own call invites" ON public.call_invites;
+CREATE POLICY "Create own call invites" ON public.call_invites
+  FOR INSERT WITH CHECK (
+    auth.uid() = caller_id
+    AND EXISTS (
+      SELECT 1 FROM public.pairs
+      WHERE pairs.id = pair_id
+        AND (
+          (pairs.user_a_id = caller_id AND pairs.user_b_id = callee_id)
+          OR (pairs.user_a_id = callee_id AND pairs.user_b_id = caller_id)
+        )
+    )
+  );
+
+DROP POLICY IF EXISTS "Update own call invites" ON public.call_invites;
+CREATE POLICY "Update own call invites" ON public.call_invites
+  FOR UPDATE USING (auth.uid() = caller_id OR auth.uid() = callee_id)
+  WITH CHECK (auth.uid() = caller_id OR auth.uid() = callee_id);
 
 -- ── messages ───────────────────────────────────────────────────────────────
 DROP POLICY IF EXISTS "View messages from pairs" ON public.messages;
@@ -306,6 +353,49 @@ CREATE POLICY "Upsert own public crypto keys" ON public.user_crypto_keys
 DROP POLICY IF EXISTS "Update own public crypto keys" ON public.user_crypto_keys;
 CREATE POLICY "Update own public crypto keys" ON public.user_crypto_keys
   FOR UPDATE USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+
+-- Fix 8: Durable call indication for offline/background users
+CREATE TABLE IF NOT EXISTS public.call_invites (
+  id          UUID        DEFAULT gen_random_uuid() PRIMARY KEY,
+  pair_id     UUID        REFERENCES public.pairs(id) ON DELETE CASCADE NOT NULL,
+  caller_id   UUID        REFERENCES public.users(id) ON DELETE CASCADE NOT NULL,
+  callee_id   UUID        REFERENCES public.users(id) ON DELETE CASCADE NOT NULL,
+  is_video    BOOLEAN     DEFAULT FALSE NOT NULL,
+  status      TEXT        DEFAULT 'ringing' CHECK (status IN ('ringing', 'accepted', 'rejected', 'missed', 'cancelled')),
+  offer_sdp   JSONB,
+  caller_info JSONB,
+  expires_at  TIMESTAMPTZ NOT NULL DEFAULT (NOW() + INTERVAL '45 seconds'),
+  created_at  TIMESTAMPTZ DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_call_invites_callee_status ON public.call_invites(callee_id, status, expires_at DESC);
+CREATE INDEX IF NOT EXISTS idx_call_invites_pair_created ON public.call_invites(pair_id, created_at DESC);
+
+ALTER TABLE public.call_invites ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "View own call invites" ON public.call_invites;
+CREATE POLICY "View own call invites" ON public.call_invites
+  FOR SELECT USING (auth.uid() = caller_id OR auth.uid() = callee_id);
+
+DROP POLICY IF EXISTS "Create own call invites" ON public.call_invites;
+CREATE POLICY "Create own call invites" ON public.call_invites
+  FOR INSERT WITH CHECK (
+    auth.uid() = caller_id
+    AND EXISTS (
+      SELECT 1 FROM public.pairs
+      WHERE pairs.id = pair_id
+        AND (
+          (pairs.user_a_id = caller_id AND pairs.user_b_id = callee_id)
+          OR (pairs.user_a_id = callee_id AND pairs.user_b_id = caller_id)
+        )
+    )
+  );
+
+DROP POLICY IF EXISTS "Update own call invites" ON public.call_invites;
+CREATE POLICY "Update own call invites" ON public.call_invites
+  FOR UPDATE USING (auth.uid() = caller_id OR auth.uid() = callee_id)
+  WITH CHECK (auth.uid() = caller_id OR auth.uid() = callee_id);
 
 -- ── invites ────────────────────────────────────────────────────────────────
 DROP POLICY IF EXISTS "View own invites" ON public.invites;
@@ -446,6 +536,12 @@ ALTER TABLE public.message_reactions
   ADD CONSTRAINT message_reactions_message_id_user_id_key UNIQUE (message_id, user_id);
 
 -- Fix 2: Users — authenticated reads, own-row updates
+ALTER TABLE public.users
+  ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT FALSE,
+  ADD COLUMN IF NOT EXISTS last_seen TIMESTAMPTZ;
+
+CREATE INDEX IF NOT EXISTS idx_users_active_last_seen ON public.users(is_active, last_seen DESC);
+
 DROP POLICY IF EXISTS "View relevant profiles" ON public.users;
 CREATE POLICY "View relevant profiles" ON public.users
   FOR SELECT USING (auth.uid() IS NOT NULL);
@@ -594,6 +690,7 @@ ALTER TABLE public.messages
   ADD COLUMN IF NOT EXISTS file_name TEXT,
   ADD COLUMN IF NOT EXISTS file_size BIGINT,
   ADD COLUMN IF NOT EXISTS mime_type TEXT,
+  ADD COLUMN IF NOT EXISTS audio_duration_ms INTEGER,
   ADD COLUMN IF NOT EXISTS call_started_at TIMESTAMPTZ,
   ADD COLUMN IF NOT EXISTS call_ended_at TIMESTAMPTZ,
   ADD COLUMN IF NOT EXISTS call_duration_seconds INTEGER,
@@ -727,6 +824,15 @@ BEGIN
         AND tablename = 'story_views'
     ) THEN
       ALTER PUBLICATION supabase_realtime ADD TABLE public.story_views;
+    END IF;
+
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_publication_tables
+      WHERE pubname = 'supabase_realtime'
+        AND schemaname = 'public'
+        AND tablename = 'call_invites'
+    ) THEN
+      ALTER PUBLICATION supabase_realtime ADD TABLE public.call_invites;
     END IF;
   END IF;
 END $$;

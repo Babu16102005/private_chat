@@ -23,6 +23,8 @@ import { formatMessageTime, formatDateHeader, getDateKey } from '../utils/date';
 
 type MessageDateGroup = { dateKey: string; messages: any[] };
 
+const MESSAGE_PAGE_SIZE = 50;
+
 type UploadableFile = {
   uri: string;
   name: string;
@@ -52,12 +54,15 @@ export const ChatScreen = ({ route, navigation }: any) => {
   const [groupedMessages, setGroupedMessages] = useState<MessageDateGroup[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(true);
+  const [isLoadingOlder, setIsLoadingOlder] = useState(false);
+  const [hasMoreMessages, setHasMoreMessages] = useState(true);
   const [isOnline, setIsOnline] = useState(false);
   const [isPartnerTyping, setIsPartnerTyping] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const [isRecording, setIsRecording] = useState(false);
+  const [recordingStartedAt, setRecordingStartedAt] = useState<number | null>(null);
   const isRecordingRef = useRef(false);
   const isRecordingTransitionRef = useRef(false);
   const [senderName, setSenderName] = useState('');
@@ -80,21 +85,64 @@ export const ChatScreen = ({ route, navigation }: any) => {
   const typingChannelRef = useRef<any>(null);
   const msgChannelRef = useRef<any>(null);
   const presenceChannelRef = useRef<any>(null);
+  const activeStatusChannelRef = useRef<any>(null);
   const footerRef = useRef<View>(null);
+  const isLoadingOlderRef = useRef(false);
+  const fetchedMessagesCountRef = useRef(0);
   const pulseAnim = useRef(new Animated.Value(1)).current;
+  const chatLoadingPulse = useRef(new Animated.Value(0.5)).current;
+  const chatLoadingOpacityStyle = { opacity: chatLoadingPulse } as any;
   const chatBackground = getChatBackgroundPreset(backgroundSettings.background_id);
 
   const fetchMessages = useCallback(async () => {
     if (!user?.id) return;
     try {
-      const data = await messageService.getMessages(pairId);
+      const data = await messageService.getMessages(pairId, MESSAGE_PAGE_SIZE, 0);
       const messageIds = (data || []).map(m => m.id);
       const deletedIds = await deleteMessageService.getDeletedIdsForUser(user.id, messageIds);
       const filtered = (data || []).filter(m => !deletedIds.has(m.id));
-      setMessages([...filtered].reverse());
+      const unreadIncomingIds = filtered
+        .filter(m => m.sender_id !== user.id && !m.read_at)
+        .map(m => m.id);
+
+      if (unreadIncomingIds.length > 0) {
+        messageService.markMessagesAsRead(unreadIncomingIds);
+      }
+
+      fetchedMessagesCountRef.current = (data || []).length;
+      setHasMoreMessages((data || []).length === MESSAGE_PAGE_SIZE);
+      const readAt = new Date().toISOString();
+      setMessages([...filtered].map(m => unreadIncomingIds.includes(m.id) ? { ...m, read_at: readAt } : m).reverse());
     } catch (error) { console.error('Fetch msgs fail:', error); }
     finally { setLoading(false); }
   }, [pairId, user?.id]);
+
+  const loadOlderMessages = useCallback(async () => {
+    if (!user?.id || isLoadingOlderRef.current || !hasMoreMessages || loading) return;
+
+    try {
+      isLoadingOlderRef.current = true;
+      setIsLoadingOlder(true);
+      const data = await messageService.getMessages(pairId, MESSAGE_PAGE_SIZE, fetchedMessagesCountRef.current);
+      const messageIds = (data || []).map(m => m.id);
+      const deletedIds = await deleteMessageService.getDeletedIdsForUser(user.id, messageIds);
+      const filtered = (data || []).filter(m => !deletedIds.has(m.id));
+      fetchedMessagesCountRef.current += (data || []).length;
+      setHasMoreMessages((data || []).length === MESSAGE_PAGE_SIZE);
+      setMessages(prev => {
+        const existingIds = new Set(prev.map(message => message.id));
+        const olderMessages = [...filtered]
+          .reverse()
+          .filter(message => !existingIds.has(message.id));
+        return [...olderMessages, ...prev];
+      });
+    } catch (error) {
+      console.error('Load older msgs fail:', error);
+    } finally {
+      setIsLoadingOlder(false);
+      isLoadingOlderRef.current = false;
+    }
+  }, [hasMoreMessages, loading, pairId, user?.id]);
 
   // Mounted ref for unmount guard
   useEffect(() => {
@@ -134,17 +182,23 @@ export const ChatScreen = ({ route, navigation }: any) => {
       const msgChannel = messageService.subscribeToMessages(pairId, (newMessage: any) => {
         if (newMessage.sender_id !== user.id) {
           messageService.markMessageAsRead(newMessage.id);
+          newMessage = { ...newMessage, read_at: new Date().toISOString() };
         }
         setMessages(prev => [...prev, newMessage]);
       });
       msgChannelRef.current = msgChannel;
 
-      const presenceChannel = messageService.subscribeToPresence(pairId, user.id, (online: boolean) => {
-        if (isMountedRef.current) {
-          setIsOnline(online);
-        }
-      });
+      const presenceChannel = messageService.subscribeToPresence(pairId, user.id, () => {});
       presenceChannelRef.current = presenceChannel;
+
+      if (partner?.id) {
+        setIsOnline(!!partner.is_active);
+        activeStatusChannelRef.current = profileService.subscribeToActiveStatus(partner.id, (active: boolean) => {
+          if (isMountedRef.current) {
+            setIsOnline(active);
+          }
+        });
+      }
 
       typingChannelRef.current = messageService.subscribeToTyping(pairId, user.id, (typing: boolean) => {
         if (isMountedRef.current) {
@@ -165,6 +219,10 @@ export const ChatScreen = ({ route, navigation }: any) => {
       if (presenceChannelRef.current) {
         supabase.removeChannel(presenceChannelRef.current);
         presenceChannelRef.current = null;
+      }
+      if (activeStatusChannelRef.current) {
+        supabase.removeChannel(activeStatusChannelRef.current);
+        activeStatusChannelRef.current = null;
       }
       if (typingChannelRef.current) {
         supabase.removeChannel(typingChannelRef.current);
@@ -194,12 +252,27 @@ export const ChatScreen = ({ route, navigation }: any) => {
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
-    if (messages.length > 0) {
+    if (messages.length > 0 && !isLoadingOlderRef.current) {
       setTimeout(() => {
         flatListRef.current?.scrollToEnd({ animated: true });
       }, 100);
     }
   }, [messages.length]);
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(chatLoadingPulse, { toValue: 1, duration: 720, useNativeDriver: true }),
+        Animated.timing(chatLoadingPulse, { toValue: 0.5, duration: 720, useNativeDriver: true }),
+      ])
+    );
+
+    if (loading) {
+      loop.start();
+    }
+
+    return () => loop.stop();
+  }, [chatLoadingPulse, loading]);
 
   useFocusEffect(
     useCallback(() => {
@@ -398,6 +471,7 @@ export const ChatScreen = ({ route, navigation }: any) => {
       await audioRecorder.prepareToRecordAsync();
       audioRecorder.record();
       isRecordingRef.current = true;
+      setRecordingStartedAt(Date.now());
       setIsRecording(true);
       Animated.loop(
         Animated.sequence([
@@ -409,6 +483,7 @@ export const ChatScreen = ({ route, navigation }: any) => {
       console.error('Failed to start recording:', err);
       isRecordingRef.current = false;
       setIsRecording(false);
+      setRecordingStartedAt(null);
       Alert.alert('Error', 'Could not start recording. Microphone may be in use.');
     } finally {
       isRecordingTransitionRef.current = false;
@@ -434,6 +509,8 @@ export const ChatScreen = ({ route, navigation }: any) => {
       });
 
       if (uri) {
+        const recorderStatus = audioRecorder.getStatus?.();
+        const recordedDurationMs = recorderStatus?.durationMillis || (audioRecorder.currentTime ? audioRecorder.currentTime * 1000 : 0);
         const uploadFile = buildUploadFile(uri, 'voice.m4a', 'audio/mp4');
         console.log('Uploading voice message:', { uri, name: uploadFile.name, type: uploadFile.type });
         setIsUploading(true);
@@ -448,7 +525,9 @@ export const ChatScreen = ({ route, navigation }: any) => {
         
         clearInterval(interval);
         setUploadProgress(1);
-        await sendMessage('Voice message', url, 'text');
+        const fallbackDurationMs = recordingStartedAt ? Date.now() - recordingStartedAt : 0;
+        const audioDurationMs = Math.max(1000, Math.round(recordedDurationMs || fallbackDurationMs));
+        await sendMessage('Voice message', url, 'audio', { audioDurationMs });
       }
     } catch (error: any) {
       console.error('Voice upload failed:', error);
@@ -461,6 +540,7 @@ export const ChatScreen = ({ route, navigation }: any) => {
         setUploadProgress(0);
       }, 500);
       isRecordingTransitionRef.current = false;
+      setRecordingStartedAt(null);
     }
   };
 
@@ -493,6 +573,13 @@ export const ChatScreen = ({ route, navigation }: any) => {
     setReplyingTo(prev => prev?.id === messageId ? null : prev);
   }, []);
 
+  const handleMessagesScroll = useCallback((event: any) => {
+    const offsetY = event.nativeEvent.contentOffset.y;
+    if (offsetY < 40) {
+      loadOlderMessages();
+    }
+  }, [loadOlderMessages]);
+
   // Grouped list render
   const renderMessageGroup = ({ item: group }: { item: MessageDateGroup }) => {
     return (
@@ -524,6 +611,7 @@ export const ChatScreen = ({ route, navigation }: any) => {
               fileName={msg.file_name}
               fileSize={msg.file_size}
               mimeType={msg.mime_type}
+              audioDurationMs={msg.audio_duration_ms}
               isMe={msg.sender_id === user!.id}
               timestamp={msg.created_at}
               delivered_at={msg.delivered_at}
@@ -553,6 +641,7 @@ export const ChatScreen = ({ route, navigation }: any) => {
       fileName={item.file_name}
       fileSize={item.file_size}
       mimeType={item.mime_type}
+      audioDurationMs={item.audio_duration_ms}
       isMe={item.sender_id === user!.id}
       timestamp={item.created_at}
       delivered_at={item.delivered_at}
@@ -575,6 +664,27 @@ export const ChatScreen = ({ route, navigation }: any) => {
       <Text style={[styles.emptySubtitle, { color: colors.gray }]}>
         Send your first message to start the conversation
       </Text>
+    </View>
+  );
+
+  const renderOlderMessagesLoader = () => {
+    if (!isLoadingOlder) return null;
+
+    return (
+      <View style={styles.olderLoader}>
+        <View style={[styles.olderLoaderDot, { backgroundColor: colors.primary }]} />
+      </View>
+    );
+  };
+
+  const renderChatLoading = () => (
+    <View style={[styles.chatLoadingWrap, { paddingTop: insets.top + 94 }]}> 
+      {[0, 1, 2, 3, 4].map((item) => (
+        <Animated.View key={item} style={[styles.chatLoadingBubble, item % 2 === 0 ? styles.chatLoadingLeft : styles.chatLoadingRight, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.42)' }, chatLoadingOpacityStyle]}>
+          <View style={[styles.chatLoadingLine, { backgroundColor: isDark ? 'rgba(255,255,255,0.13)' : 'rgba(255,255,255,0.55)' }]} />
+          <View style={[styles.chatLoadingLineShort, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.38)' }]} />
+        </Animated.View>
+      ))}
     </View>
   );
 
@@ -709,7 +819,9 @@ export const ChatScreen = ({ route, navigation }: any) => {
         </BlurView>
 
         {/* Messages List */}
-        {messages.length > 0 && !isSearching ? (
+        {loading ? (
+          renderChatLoading()
+        ) : messages.length > 0 && !isSearching ? (
           <FlatList<any>
             ref={flatListRef}
             data={groupedMessages}
@@ -721,7 +833,9 @@ export const ChatScreen = ({ route, navigation }: any) => {
               isSearching && { paddingBottom: 0 }
             ]}
             showsVerticalScrollIndicator={false}
-            ListHeaderComponent={messages.length <= 0 ? renderEmptyChat : null}
+            onScroll={handleMessagesScroll}
+            scrollEventThrottle={16}
+            ListHeaderComponent={renderOlderMessagesLoader}
             ListFooterComponent={<View ref={footerRef as any} style={{ height: 8 }} />}
           />
         ) : isSearching && searchQuery.length > 0 ? (
@@ -755,6 +869,9 @@ export const ChatScreen = ({ route, navigation }: any) => {
               { paddingTop: insets.top + 64 + (isSearching ? 52 : 0) + 10 }
             ]}
             showsVerticalScrollIndicator={false}
+            onScroll={handleMessagesScroll}
+            scrollEventThrottle={16}
+            ListHeaderComponent={renderOlderMessagesLoader}
             ListEmptyComponent={renderEmptyChat}
             ListFooterComponent={<View ref={footerRef as any} style={{ height: 8 }} />}
           />
@@ -879,6 +996,14 @@ const styles = StyleSheet.create({
 
   // List
   listInside: { paddingHorizontal: 4 },
+  olderLoader: { alignItems: 'center', justifyContent: 'center', paddingVertical: 12 },
+  olderLoaderDot: { width: 8, height: 8, borderRadius: 4 },
+  chatLoadingWrap: { flex: 1, paddingHorizontal: 14, justifyContent: 'center' },
+  chatLoadingBubble: { width: '72%', borderRadius: 24, padding: 16, marginBottom: 14 },
+  chatLoadingLeft: { alignSelf: 'flex-start', borderBottomLeftRadius: 8 },
+  chatLoadingRight: { alignSelf: 'flex-end', borderBottomRightRadius: 8 },
+  chatLoadingLine: { width: '82%', height: 12, borderRadius: 6, marginBottom: 10 },
+  chatLoadingLineShort: { width: '46%', height: 10, borderRadius: 5 },
 
   // Date separator (WhatsApp-style pill)
   dateSeparator: { alignItems: 'center', marginVertical: 12, marginHorizontal: 8 },

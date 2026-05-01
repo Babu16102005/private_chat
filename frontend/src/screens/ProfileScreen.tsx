@@ -167,8 +167,22 @@ export const ProfileScreen = ({ navigation }: any) => {
     <View style={[styles.container, { backgroundColor: colors.background }]}> 
       <View style={StyleSheet.absoluteFill}>
         <LinearGradient colors={colors.gradientPrimary as any} start={{ x: 0.08, y: 0 }} end={{ x: 0.95, y: 1 }} style={StyleSheet.absoluteFill} />
-        <LinearGradient colors={['rgba(100,243,255,0.12)', 'rgba(233,199,255,0.07)', 'transparent'] as any} start={{ x: 1, y: 0 }} end={{ x: 0.18, y: 0.76 }} style={StyleSheet.absoluteFill} />
-        <LinearGradient colors={['transparent', 'rgba(141,255,213,0.08)', 'rgba(5,7,18,0.22)'] as any} start={{ x: 0, y: 0.25 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+        <LinearGradient
+          colors={themeMode === 'mocha'
+            ? ['rgba(71,111,155,0.2)', 'rgba(127,165,194,0.14)', 'transparent'] as any
+            : ['rgba(100,243,255,0.12)', 'rgba(233,199,255,0.07)', 'transparent'] as any}
+          start={{ x: 1, y: 0 }}
+          end={{ x: 0.18, y: 0.76 }}
+          style={StyleSheet.absoluteFill}
+        />
+        <LinearGradient
+          colors={themeMode === 'mocha'
+            ? ['transparent', 'rgba(82,122,167,0.16)', 'rgba(48,80,113,0.16)'] as any
+            : ['transparent', 'rgba(141,255,213,0.08)', 'rgba(5,7,18,0.22)'] as any}
+          start={{ x: 0, y: 0.25 }}
+          end={{ x: 1, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
       </View>
 
       {/* Header */}
@@ -182,8 +196,8 @@ export const ProfileScreen = ({ navigation }: any) => {
 
       <ScrollView contentContainerStyle={styles.scrollArea} showsVerticalScrollIndicator={false}>
         {/* Profile card */}
-        <BlurView intensity={colors.glassBlur + 14} tint={isDark ? 'dark' : 'light'} style={[styles.profileCard, { borderColor: colors.glassBorder, borderWidth: colors.borderWidth }]}> 
-          <LinearGradient colors={['rgba(255,255,255,0.1)', 'rgba(255,255,255,0.02)'] as any} style={StyleSheet.absoluteFill} />
+          <BlurView intensity={colors.glassBlur + 14} tint={isDark ? 'dark' : 'light'} style={[styles.profileCard, { borderColor: colors.glassBorder, borderWidth: colors.borderWidth }]}> 
+          <LinearGradient colors={isDark ? ['rgba(255,255,255,0.1)', 'rgba(255,255,255,0.02)'] as any : ['rgba(48,80,113,0.12)', 'rgba(48,80,113,0.04)'] as any} style={StyleSheet.absoluteFill} />
           <View style={styles.frostFill} />
           <View style={styles.profileTop}>
             <TouchableOpacity activeOpacity={0.8} onPress={pickAvatar} style={styles.avatarButton}>
@@ -229,9 +243,7 @@ export const ProfileScreen = ({ navigation }: any) => {
             <Text style={[styles.menuLabel, { color: colors.text }]}>{themeMode === 'obsidian' ? 'Obsidian' : 'Mocha'} Theme</Text>
             <View style={[styles.themeSwitch, { borderColor: colors.glassBorder }]}> 
               <LinearGradient colors={colors.gradientSecondary as any} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
-              <Text style={[styles.themeSwitchLabel, { color: themeMode === 'obsidian' ? colors.text : colors.gray }]}>1</Text>
-              <Text style={[styles.themeSwitchLabel, { color: themeMode === 'mocha' ? colors.text : colors.gray }]}>2</Text>
-              <View style={[styles.themeSwitchKnob, { transform: [{ translateX: themeMode === 'obsidian' ? 0 : 34 }] }]} />
+              <View style={[styles.themeSwitchKnob, { transform: [{ translateX: themeMode === 'obsidian' ? 0 : 18 }] }]} />
             </View>
           </TouchableOpacity>
         </SettingSection>
@@ -243,7 +255,7 @@ export const ProfileScreen = ({ navigation }: any) => {
               <ShieldCheck size={20} color={colors.gray} />
               <Text style={[styles.inputLabel, { color: colors.gray }]}>Change Password</Text>
             </View>
-            <View style={[styles.passwordInputWrap, { backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 16, borderColor: colors.glassBorder, borderWidth: colors.borderWidth }]}> 
+            <View style={[styles.passwordInputWrap, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(48,80,113,0.09)', borderRadius: 16, borderColor: colors.glassBorder, borderWidth: colors.borderWidth }]}> 
               <Lock size={18} color={colors.gray} style={{ marginRight: 10 }} />
               <TextInput
                 style={[styles.passwordInput, { color: colors.text }]}
@@ -282,7 +294,7 @@ export const ProfileScreen = ({ navigation }: any) => {
       {/* Edit About Modal */}
       <Modal visible={showNameModal} transparent animationType="fade" onRequestClose={() => setShowNameModal(false)}>
         <View style={styles.modalOverlay}>
-          <BlurView intensity={colors.glassBlur + 16} tint={isDark ? 'dark' : 'light'} style={[styles.modalContent, { backgroundColor: 'rgba(255,255,255,0.04)', borderColor: colors.glassBorder, borderWidth: colors.borderWidth }]}> 
+          <BlurView intensity={colors.glassBlur + 16} tint={isDark ? 'dark' : 'light'} style={[styles.modalContent, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(48,80,113,0.08)', borderColor: colors.glassBorder, borderWidth: colors.borderWidth }]}> 
             <View style={styles.modalHeader}>
               <Text style={[styles.modalTitle, { color: colors.text }]}>Name</Text>
               <TouchableOpacity onPress={() => setShowNameModal(false)}>
@@ -290,7 +302,7 @@ export const ProfileScreen = ({ navigation }: any) => {
               </TouchableOpacity>
             </View>
             <TextInput
-              style={[styles.aboutInput, { color: colors.text, borderColor: colors.glassBorder, backgroundColor: 'rgba(255,255,255,0.08)', borderWidth: colors.borderWidth }]}
+              style={[styles.aboutInput, { color: colors.text, borderColor: colors.glassBorder, backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(48,80,113,0.09)', borderWidth: colors.borderWidth }]}
               placeholder="Your name"
               placeholderTextColor={colors.gray}
               value={nameText}
@@ -312,7 +324,7 @@ export const ProfileScreen = ({ navigation }: any) => {
 
       <Modal visible={showAboutModal} transparent animationType="fade" onRequestClose={() => setShowAboutModal(false)}>
         <View style={styles.modalOverlay}>
-          <BlurView intensity={colors.glassBlur + 16} tint={isDark ? 'dark' : 'light'} style={[styles.modalContent, { backgroundColor: 'rgba(255,255,255,0.04)', borderColor: colors.glassBorder, borderWidth: colors.borderWidth }]}> 
+          <BlurView intensity={colors.glassBlur + 16} tint={isDark ? 'dark' : 'light'} style={[styles.modalContent, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(48,80,113,0.08)', borderColor: colors.glassBorder, borderWidth: colors.borderWidth }]}> 
             <View style={styles.modalHeader}>
               <Text style={[styles.modalTitle, { color: colors.text }]}>About</Text>
               <TouchableOpacity onPress={() => setShowAboutModal(false)}>
@@ -320,7 +332,7 @@ export const ProfileScreen = ({ navigation }: any) => {
               </TouchableOpacity>
             </View>
             <TextInput
-              style={[styles.aboutInput, { color: colors.text, borderColor: colors.glassBorder, backgroundColor: 'rgba(255,255,255,0.16)' }]}
+              style={[styles.aboutInput, { color: colors.text, borderColor: colors.glassBorder, backgroundColor: isDark ? 'rgba(255,255,255,0.16)' : 'rgba(48,80,113,0.12)' }]}
               placeholder="type your status..."
               placeholderTextColor={colors.gray}
               value={aboutText}
@@ -342,7 +354,7 @@ export const ProfileScreen = ({ navigation }: any) => {
 
       <Modal visible={showPinModal} transparent animationType="fade" onRequestClose={() => setShowPinModal(false)}>
         <View style={styles.modalOverlay}>
-          <BlurView intensity={colors.glassBlur + 16} tint={isDark ? 'dark' : 'light'} style={[styles.modalContent, { backgroundColor: 'rgba(255,255,255,0.04)', borderColor: colors.glassBorder, borderWidth: colors.borderWidth }]}> 
+          <BlurView intensity={colors.glassBlur + 16} tint={isDark ? 'dark' : 'light'} style={[styles.modalContent, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(48,80,113,0.08)', borderColor: colors.glassBorder, borderWidth: colors.borderWidth }]}> 
             <View style={styles.modalHeader}>
               <Text style={[styles.modalTitle, { color: colors.text }]}>Set App PIN</Text>
               <TouchableOpacity onPress={() => setShowPinModal(false)}>
@@ -350,7 +362,7 @@ export const ProfileScreen = ({ navigation }: any) => {
               </TouchableOpacity>
             </View>
             <TextInput
-              style={[styles.aboutInput, { color: colors.text, borderColor: colors.glassBorder, backgroundColor: 'rgba(255,255,255,0.08)', borderWidth: colors.borderWidth, textAlign: 'center', fontSize: 28, letterSpacing: 10 }]}
+              style={[styles.aboutInput, { color: colors.text, borderColor: colors.glassBorder, backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(48,80,113,0.09)', borderWidth: colors.borderWidth, textAlign: 'center', fontSize: 28, letterSpacing: 10 }]}
               placeholder="0000"
               placeholderTextColor={colors.gray}
               value={pinText}
@@ -381,7 +393,7 @@ function SettingSection({ label, children }: { label: string; children: React.Re
   return (
     <View style={{ marginBottom: 28 }}>
       <Text style={[styles.sectionLabel, { color: colors.gray }]}>{label}</Text>
-      <BlurView intensity={colors.glassBlur + 14} tint={isDark ? 'dark' : 'light'} style={[styles.sectionGroup, { backgroundColor: 'rgba(255,255,255,0.03)', borderColor: colors.glassBorder, borderWidth: colors.borderWidth }]}> 
+      <BlurView intensity={colors.glassBlur + 14} tint={isDark ? 'dark' : 'light'} style={[styles.sectionGroup, { backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(48,80,113,0.08)', borderColor: colors.glassBorder, borderWidth: colors.borderWidth }]}> 
         {children}
       </BlurView>
     </View>
@@ -391,10 +403,10 @@ function SettingSection({ label, children }: { label: string; children: React.Re
 function SettingItem({ icon, label, value, onPress, isLast }: {
   icon: React.ReactNode; label: string; value: string; onPress: () => void; isLast?: boolean;
 }) {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   return (
     <TouchableOpacity
-      style={[styles.settingItem, !isLast && { borderBottomColor: 'rgba(255,255,255,0.06)' }]}
+      style={[styles.settingItem, !isLast && { borderBottomColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(48,80,113,0.12)' }]}
       onPress={onPress}
     >
       {icon}
@@ -416,7 +428,7 @@ const styles = StyleSheet.create({
   profileCard: { padding: 18, borderRadius: 34, marginBottom: 28, overflow: 'hidden' },
   frostFill: { ...StyleSheet.absoluteFillObject, backgroundColor: 'transparent' },
   profileTop: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  avatarButton: { position: 'relative', borderRadius: 38, padding: 4, backgroundColor: 'rgba(255,255,255,0.06)', borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.2)' },
+  avatarButton: { position: 'relative', borderRadius: 38, padding: 4, backgroundColor: 'rgba(48,80,113,0.08)', borderWidth: 0.5, borderColor: 'rgba(48,80,113,0.18)' },
   profileAvatar: { width: 66, height: 66 },
   avatarEditBadge: { position: 'absolute', right: -2, bottom: -2, width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: 'rgba(255,255,255,0.35)', shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.24, shadowRadius: 10, elevation: 5 },
   profileInfo: { flex: 1 },
@@ -436,17 +448,16 @@ const styles = StyleSheet.create({
   // Toggle
   menuItem: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14 },
   menuLabel: { flex: 1, fontSize: 16, fontWeight: '500' },
-  themeSwitch: { width: 72, height: 38, borderRadius: 19, borderWidth: 0.5, overflow: 'hidden', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, backgroundColor: 'rgba(255,255,255,0.08)' },
-  themeSwitchLabel: { fontSize: 12, fontWeight: '900', zIndex: 2, letterSpacing: 0.4 },
-  themeSwitchKnob: { position: 'absolute', left: 3, width: 32, height: 32, borderRadius: 16, backgroundColor: '#FFFFFF', zIndex: 1 },
+  themeSwitch: { width: 46, height: 26, borderRadius: 13, borderWidth: 0.5, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(48,80,113,0.09)' },
+  themeSwitchKnob: { position: 'absolute', left: 3, width: 20, height: 20, borderRadius: 10, backgroundColor: '#FFFFFF', zIndex: 1 },
 
   // Security
-  securityCard: { borderRadius: 20, padding: 16, backgroundColor: 'rgba(128,128,128,0.06)' },
+  securityCard: { borderRadius: 20, padding: 16, backgroundColor: 'rgba(48,80,113,0.08)' },
   inputRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
   inputLabel: { fontSize: 15, fontWeight: '500', marginLeft: 10 },
   passwordInputWrap: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, height: 46, marginBottom: 12 },
   passwordInput: { flex: 1, fontSize: 15, fontWeight: '400' },
-  updatePwdBtn: { height: 46, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderWidth: 0.5, backgroundColor: 'rgba(255,255,255,0.08)' },
+  updatePwdBtn: { height: 46, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderWidth: 0.5, backgroundColor: 'rgba(48,80,113,0.09)' },
   profileButtonGradient: { flex: 1, alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center' },
   buttonShine: { position: 'absolute', top: 1, left: 8, right: 8, height: 18, borderRadius: 999, opacity: 0.34 },
   updatePwdText: { fontSize: 15, fontWeight: '600' },
@@ -462,6 +473,6 @@ const styles = StyleSheet.create({
   modalTitle: { fontSize: 18, fontWeight: '700' },
   aboutInput: { fontSize: 15, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, minHeight: 44, textAlignVertical: 'top' },
   charCount: { fontSize: 12, textAlign: 'right', marginTop: 6 },
-  modalSaveBtn: { borderRadius: 20, height: 48, marginTop: 16, alignItems: 'center', overflow: 'hidden', borderWidth: 0.5, backgroundColor: 'rgba(255,255,255,0.08)' },
+  modalSaveBtn: { borderRadius: 20, height: 48, marginTop: 16, alignItems: 'center', overflow: 'hidden', borderWidth: 0.5, backgroundColor: 'rgba(48,80,113,0.09)' },
   modalSaveText: { color: '#FFFFFF', fontWeight: '700', fontSize: 16 },
 });

@@ -13,7 +13,7 @@ import { chatBackgroundPresets, defaultChatBackgroundSettings, normalizeBackgrou
 export const ChatSettingsScreen = ({ route, navigation }: any) => {
   const { pairId, partner } = route.params;
   const { user } = useAuth();
-  const { colors, isDark } = useTheme();
+  const { colors, isDark, themeMode } = useTheme();
   const insets = useSafeAreaInsets();
   const [isBlocked, setIsBlocked] = useState(false);
   const [backgroundSettings, setBackgroundSettings] = useState(defaultChatBackgroundSettings);
@@ -168,8 +168,22 @@ export const ChatSettingsScreen = ({ route, navigation }: any) => {
     <View style={[styles.container, { backgroundColor: colors.background }]}> 
       <View style={StyleSheet.absoluteFill}>
         <LinearGradient colors={colors.gradientPrimary as any} start={{ x: 0.08, y: 0 }} end={{ x: 0.95, y: 1 }} style={StyleSheet.absoluteFill} />
-        <LinearGradient colors={['rgba(100,243,255,0.12)', 'rgba(233,199,255,0.07)', 'transparent'] as any} start={{ x: 1, y: 0 }} end={{ x: 0.18, y: 0.76 }} style={StyleSheet.absoluteFill} />
-        <LinearGradient colors={['transparent', 'rgba(141,255,213,0.08)', 'rgba(5,7,18,0.22)'] as any} start={{ x: 0, y: 0.25 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+        <LinearGradient
+          colors={themeMode === 'mocha'
+            ? ['rgba(71,111,155,0.2)', 'rgba(127,165,194,0.14)', 'transparent'] as any
+            : ['rgba(100,243,255,0.12)', 'rgba(233,199,255,0.07)', 'transparent'] as any}
+          start={{ x: 1, y: 0 }}
+          end={{ x: 0.18, y: 0.76 }}
+          style={StyleSheet.absoluteFill}
+        />
+        <LinearGradient
+          colors={themeMode === 'mocha'
+            ? ['transparent', 'rgba(82,122,167,0.16)', 'rgba(48,80,113,0.16)'] as any
+            : ['transparent', 'rgba(141,255,213,0.08)', 'rgba(5,7,18,0.22)'] as any}
+          start={{ x: 0, y: 0.25 }}
+          end={{ x: 1, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
       </View>
 
       {/* Header */}
@@ -249,7 +263,7 @@ export const ChatSettingsScreen = ({ route, navigation }: any) => {
                   return (
                     <TouchableOpacity
                       key={opacity}
-                      style={[styles.opacityPill, { borderColor: isSelected ? colors.primary : colors.glassBorder, backgroundColor: isSelected ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.12)' }]}
+                      style={[styles.opacityPill, { borderColor: isSelected ? colors.primary : colors.glassBorder, backgroundColor: isSelected ? (isDark ? 'rgba(255,255,255,0.22)' : 'rgba(48,80,113,0.14)') : (isDark ? 'rgba(255,255,255,0.12)' : 'rgba(48,80,113,0.08)') }]}
                       onPress={() => handleOpacityChange(opacity)}
                     >
                       <Text style={[styles.opacityText, { color: isSelected ? colors.text : colors.gray }]}>{Math.round(opacity * 100)}%</Text>
@@ -266,7 +280,7 @@ export const ChatSettingsScreen = ({ route, navigation }: any) => {
             <MessagesSquare size={20} color={colors.text} />
             <Text style={[styles.menuLabel, { color: colors.text }]}>Media, Links &amp; Docs</Text>
           </View>
-          <View style={[styles.mediaCount, { backgroundColor: 'rgba(255,255,255,0.16)', borderColor: colors.glassBorder }]}> 
+          <View style={[styles.mediaCount, { backgroundColor: isDark ? 'rgba(255,255,255,0.16)' : 'rgba(48,80,113,0.1)', borderColor: colors.glassBorder }]}> 
             <View style={styles.mediaCountItem}>
               <ImageIcon size={16} color={colors.gray} />
               <Text style={[styles.mediaLabel, { color: colors.gray }]}>Photos &amp; Videos</Text>
@@ -309,9 +323,9 @@ export const ChatSettingsScreen = ({ route, navigation }: any) => {
 function SettingItem({ icon, label, value, onPress, isLast }: {
   icon: React.ReactNode; label: string; value: string; onPress: () => void; isLast?: boolean;
 }) {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   return (
-    <View style={[styles.menuItem, !isLast && { borderBottomColor: 'rgba(255,255,255,0.06)' }]}>
+    <View style={[styles.menuItem, !isLast && { borderBottomColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(48,80,113,0.12)' }]}> 
       {icon}
       <Text style={[styles.menuLabel, { color: colors.text }]}>{label}</Text>
       <Text style={[styles.settingValue, { color: colors.gray }]}>{value}</Text>
@@ -322,7 +336,7 @@ function SettingItem({ icon, label, value, onPress, isLast }: {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   headerBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 12, justifyContent: 'space-between', overflow: 'hidden' },
-  backBtn: { width: 40, height: 40, borderRadius: 18, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.1)', borderWidth: 0.5 },
+  backBtn: { width: 40, height: 40, borderRadius: 18, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(48,80,113,0.1)', borderWidth: 0.5 },
   headerTitle: { fontSize: 20, fontWeight: '700' },
   scrollArea: { paddingHorizontal: 16, paddingTop: 20 },
 
@@ -334,7 +348,7 @@ const styles = StyleSheet.create({
 
   // Sections
   section: { marginBottom: 18, borderRadius: 24, overflow: 'hidden', backgroundColor: 'rgba(128,128,128,0.04)' },
-  menuItem: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: 'rgba(255,255,255,0.06)' },
+  menuItem: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: 'rgba(48,80,113,0.12)' },
   menuLabel: { flex: 1, fontSize: 16, fontWeight: '500', marginLeft: 14 },
   settingValue: { fontSize: 14, color: 'rgba(255,255,255,0.5)' },
   menuItemLast: { borderBottomWidth: 0 },
@@ -345,11 +359,11 @@ const styles = StyleSheet.create({
   mediaLabel: { flex: 1, fontSize: 15, marginLeft: 14 },
   mediaValue: { fontSize: 15 },
   backgroundGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, padding: 12 },
-  backgroundOption: { width: '30%', minWidth: 88, borderRadius: 18, padding: 6, borderWidth: 1, borderColor: 'rgba(255,255,255,0.14)', backgroundColor: 'rgba(255,255,255,0.06)' },
+  backgroundOption: { width: '30%', minWidth: 88, borderRadius: 18, padding: 6, borderWidth: 1, borderColor: 'rgba(48,80,113,0.18)', backgroundColor: 'rgba(48,80,113,0.08)' },
   backgroundPreview: { height: 64, borderRadius: 14, marginBottom: 8 },
   backgroundName: { fontSize: 11, fontWeight: '600', textAlign: 'center' },
   customBackgroundArea: { flexDirection: 'row', gap: 10, paddingHorizontal: 12, paddingBottom: 12 },
-  uploadButton: { flex: 1, minHeight: 46, borderRadius: 18, borderWidth: 1, backgroundColor: 'rgba(255,255,255,0.08)', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 10 },
+  uploadButton: { flex: 1, minHeight: 46, borderRadius: 18, borderWidth: 1, backgroundColor: 'rgba(48,80,113,0.09)', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 10 },
   uploadText: { fontSize: 13, fontWeight: '700' },
   opacityArea: { paddingHorizontal: 12, paddingBottom: 14 },
   opacityLabel: { fontSize: 12, fontWeight: '700', textTransform: 'uppercase', marginBottom: 8 },

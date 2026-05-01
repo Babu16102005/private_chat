@@ -58,20 +58,20 @@ const obsidianTheme: ThemeColors = {
 };
 
 const mochaTheme: ThemeColors = {
-  primary: '#769FCD', // Deep Sky Blue (Accent)
-  secondary: '#B9D7EA', // Soft Blue
-  tertiary: '#D6E6F2', // Light Sky
-  background: '#F7FBFC', // Main Background (Ultra Light)
-  bubbleSentBg: 'rgba(118, 159, 205, 0.14)',
-  bubbleReceivedBg: 'rgba(185, 215, 234, 0.18)',
-  white: '#F7FBFC',
+  primary: '#476F9B', // Deep Sky Blue (Accent)
+  secondary: '#7FA5C2', // Soft Blue
+  tertiary: '#A9C3D6', // Light Sky
+  background: '#D0DFE9', // Main Background (Darker Light Mode)
+  bubbleSentBg: 'rgba(71, 111, 155, 0.24)',
+  bubbleReceivedBg: 'rgba(127, 165, 194, 0.32)',
+  white: '#D0DFE9',
   black: '#000000',
-  gray: 'rgba(118, 159, 205, 0.65)',
-  lightGray: 'rgba(0, 0, 0, 0.04)',
+  gray: 'rgba(48, 80, 113, 0.78)',
+  lightGray: 'rgba(15, 43, 76, 0.12)',
   text: '#112D4E', // Deep Navy for high contrast
-  gradientPrimary: ['#F7FBFC', '#D6E6F2', '#B9D7EA', '#F7FBFC'], 
-  gradientSecondary: ['rgba(118, 159, 205, 0.3)', 'rgba(185, 215, 234, 0.25)', 'rgba(214, 230, 242, 0.2)'],
-  glassBorder: 'rgba(118, 159, 205, 0.2)',
+  gradientPrimary: ['#D0DFE9', '#B8CEDD', '#8FB1C8', '#C7D9E5'], 
+  gradientSecondary: ['rgba(71, 111, 155, 0.44)', 'rgba(127, 165, 194, 0.4)', 'rgba(169, 195, 214, 0.34)'],
+  glassBorder: 'rgba(48, 80, 113, 0.34)',
   borderWidth: 0.8,
   glassOpacity: 0.05,
   glassBlur: 40,
