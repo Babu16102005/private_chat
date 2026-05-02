@@ -186,7 +186,7 @@ export const authService = {
     try {
       const { data, error } = await supabase.auth.signUp({ email, password });
       if (error) throw error;
-      return data ? { ...data, partner: getPartnerFromPair(data, user.id) } : null;
+      return data;
     } catch (error) {
       handleError(error, 'Sign up failed');
       throw error;
