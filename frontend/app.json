@@ -4,11 +4,11 @@
     "slug": "Kiba",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/kibabg.png",
+    "icon": "./assets/kibabg_centered.png",
     "scheme": "chatapp",
     "userInterfaceStyle": "light",
     "splash": {
-      "image": "./assets/kiba-entry.png",
+      "image": "./assets/kibabg_centered.png",
       "resizeMode": "contain",
       "backgroundColor": "#05000D"
     },
@@ -28,7 +28,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/kibabg.png",
+        "foregroundImage": "./assets/kibabg_centered.png",
         "backgroundColor": "#ffffff"
       },
       "package": "com.chatapplication.app",
@@ -60,7 +60,7 @@
       "runtimeVersion": "1.0.0"
     },
     "web": {
-      "favicon": "./assets/kibabg.png"
+      "favicon": "./assets/kibabg_centered.png"
     },
     "plugins": [
       "expo-video",
@@ -72,9 +72,7 @@
         }
       ],
       "expo-audio",
-      "expo-asset",
-      "expo-secure-store",
-      "expo-sqlite"
+      "expo-asset"
     ],
     "owner": "babu_b",
     "extra": {
