@@ -1,14 +1,15 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
-import { View, Text, TextInput, TouchableOpacity, FlatList, StyleSheet, Image, Alert, Platform, KeyboardAvoidingView, Animated } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, FlatList, StyleSheet, Image, Alert, Platform, KeyboardAvoidingView, Animated, ScrollView } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
-import { ChevronLeft, Phone, Video, Mic, Camera, SendHorizontal, Search, X, CircleStop, MoreVertical, Reply as ReplyIcon } from 'lucide-react-native';
-import { messageService, deleteMessageService, storageService, profileService, messageReactionsService, chatSettingsService } from '../services/supabaseService';
+import { ChevronLeft, Phone, Video, Mic, Camera, SendHorizontal, Search, X, CircleStop, MoreVertical, Reply as ReplyIcon, SmilePlus } from 'lucide-react-native';
+import { messageService, deleteMessageService, storageService, profileService, messageReactionsService, chatSettingsService, isProfileOnline } from '../services/supabaseService';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import { useAudioRecorder, AudioModule, RecordingPresets, setAudioModeAsync } from 'expo-audio';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { supabase } from '../services/supabase';
 import { useAuth } from '../context/AuthContext';
@@ -18,10 +19,13 @@ import { MediaViewer } from '../components/MediaViewer';
 import { useTheme } from '../context/ThemeContext';
 import { useCall } from '../context/CallContext';
 import { defaultChatBackgroundSettings, getChatBackgroundPreset } from '../utils/chatBackground';
+import { Sticker, stickers } from '../utils/stickers';
 
 import { formatMessageTime, formatDateHeader, getDateKey } from '../utils/date';
 
 type MessageDateGroup = { dateKey: string; messages: any[] };
+
+const STICKER_USAGE_STORAGE_KEY = 'kiba:stickerUsageCounts';
 
 const MESSAGE_PAGE_SIZE = 50;
 
@@ -69,6 +73,8 @@ export const ChatScreen = ({ route, navigation }: any) => {
   const [backgroundSettings, setBackgroundSettings] = useState(defaultChatBackgroundSettings);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
+  const [isStickerPickerOpen, setIsStickerPickerOpen] = useState(false);
+  const [stickerUsageCounts, setStickerUsageCounts] = useState<Record<string, number>>({});
 
   // Reply state
   const [replyingTo, setReplyingTo] = useState<ReplyToMessage | null>(null);
@@ -84,7 +90,6 @@ export const ChatScreen = ({ route, navigation }: any) => {
   const typingTimeoutRef = useRef<any>(null);
   const typingChannelRef = useRef<any>(null);
   const msgChannelRef = useRef<any>(null);
-  const presenceChannelRef = useRef<any>(null);
   const activeStatusChannelRef = useRef<any>(null);
   const footerRef = useRef<View>(null);
   const isLoadingOlderRef = useRef(false);
@@ -92,6 +97,14 @@ export const ChatScreen = ({ route, navigation }: any) => {
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const chatLoadingPulse = useRef(new Animated.Value(0.5)).current;
   const chatLoadingOpacityStyle = { opacity: chatLoadingPulse } as any;
+
+  const sortedStickers = useMemo(() => {
+    return [...stickers].sort((a, b) => {
+      const usageDelta = (stickerUsageCounts[b.id] || 0) - (stickerUsageCounts[a.id] || 0);
+      if (usageDelta !== 0) return usageDelta;
+      return stickers.indexOf(a) - stickers.indexOf(b);
+    });
+  }, [stickerUsageCounts]);
   const chatBackground = getChatBackgroundPreset(backgroundSettings.background_id);
 
   const fetchMessages = useCallback(async () => {
@@ -154,6 +167,21 @@ export const ChatScreen = ({ route, navigation }: any) => {
     };
   }, []);
 
+  useEffect(() => {
+    let active = true;
+
+    AsyncStorage.getItem(STICKER_USAGE_STORAGE_KEY)
+      .then((value) => {
+        if (!active || !value) return;
+        setStickerUsageCounts(JSON.parse(value));
+      })
+      .catch((error) => console.warn('Failed to load sticker usage:', error));
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
   // Fetch sender name from user profile
   useEffect(() => {
     (async () => {
@@ -188,11 +216,8 @@ export const ChatScreen = ({ route, navigation }: any) => {
       });
       msgChannelRef.current = msgChannel;
 
-      const presenceChannel = messageService.subscribeToPresence(pairId, user.id, () => {});
-      presenceChannelRef.current = presenceChannel;
-
       if (partner?.id) {
-        setIsOnline(!!partner.is_active);
+        setIsOnline(isProfileOnline(partner));
         activeStatusChannelRef.current = profileService.subscribeToActiveStatus(partner.id, (active: boolean) => {
           if (isMountedRef.current) {
             setIsOnline(active);
@@ -215,10 +240,6 @@ export const ChatScreen = ({ route, navigation }: any) => {
       if (msgChannelRef.current) {
         supabase.removeChannel(msgChannelRef.current);
         msgChannelRef.current = null;
-      }
-      if (presenceChannelRef.current) {
-        supabase.removeChannel(presenceChannelRef.current);
-        presenceChannelRef.current = null;
       }
       if (activeStatusChannelRef.current) {
         supabase.removeChannel(activeStatusChannelRef.current);
@@ -298,6 +319,7 @@ export const ChatScreen = ({ route, navigation }: any) => {
 
   const handleTyping = (text: string) => {
     setInput(text);
+    if (isStickerPickerOpen) setIsStickerPickerOpen(false);
     if (!typingChannelRef.current || !isMountedRef.current) return;
 
     messageService.sendTypingIndicator(typingChannelRef.current, true);
@@ -322,6 +344,7 @@ export const ChatScreen = ({ route, navigation }: any) => {
       await messageService.sendMessage(pairId, trimmed, mediaUrl, msgType || 'text', replyingTo?.id, options);
       setReplyingTo(null);
       setInput('');
+      setIsStickerPickerOpen(false);
       setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
     } catch (error) {
       console.error('Send message fail:', error);
@@ -329,8 +352,29 @@ export const ChatScreen = ({ route, navigation }: any) => {
     }
   }, [pairId, replyingTo]);
 
-  const normalizeMessageType = (messageType?: string, mediaUrl?: string, content?: string): 'text' | 'image' | 'video' | 'audio' | 'document' | 'system_call' | 'encrypted' => {
-    if (messageType === 'image' || messageType === 'video' || messageType === 'audio' || messageType === 'voice' || messageType === 'document' || messageType === 'system_call' || messageType === 'encrypted') {
+  const sendSticker = useCallback(async (sticker: Sticker) => {
+    try {
+      await messageService.sendMessage(pairId, sticker.message, sticker.id, 'sticker', replyingTo?.id);
+      setReplyingTo(null);
+      setIsStickerPickerOpen(false);
+      setStickerUsageCounts((current) => {
+        const next = { ...current, [sticker.id]: (current[sticker.id] || 0) + 1 };
+        AsyncStorage.setItem(STICKER_USAGE_STORAGE_KEY, JSON.stringify(next)).catch((error) => console.warn('Failed to save sticker usage:', error));
+        return next;
+      });
+      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+    } catch (error: any) {
+      if (error?.code === '23514') {
+        Alert.alert('Sticker setup needed', 'Please apply the latest Supabase migration before sending stickers.');
+        return;
+      }
+      console.error('Send sticker fail:', error);
+      Alert.alert('Error', 'Failed to send sticker. Please try again.');
+    }
+  }, [pairId, replyingTo]);
+
+  const normalizeMessageType = (messageType?: string, mediaUrl?: string, content?: string): 'text' | 'image' | 'video' | 'audio' | 'document' | 'system_call' | 'encrypted' | 'sticker' => {
+    if (messageType === 'image' || messageType === 'video' || messageType === 'audio' || messageType === 'voice' || messageType === 'document' || messageType === 'system_call' || messageType === 'encrypted' || messageType === 'sticker') {
       return messageType === 'voice' ? 'audio' : messageType;
     }
 
@@ -896,10 +940,24 @@ export const ChatScreen = ({ route, navigation }: any) => {
         {/* Input Bar */}
         <View style={[styles.pillWrapper, { paddingBottom: Math.max(insets.bottom, 10) }]}>
           {isRecording && (
-            <Animated.View style={[styles.recordingIndicator, { transform: [{ scale: pulseAnim }] }]}>
+            <Animated.View style={[styles.recordingIndicator, { transform: [{ scale: pulseAnim }] }]}> 
               <View style={[styles.recordingDot, { backgroundColor: '#FF3B30' }]} />
               <Text style={styles.recordingText}>Recording... Tap mic to stop</Text>
             </Animated.View>
+          )}
+
+          {isStickerPickerOpen && (
+            <BlurView intensity={colors.glassBlur + 12} tint={isDark ? 'dark' : 'light'} style={[styles.stickerPicker, { borderColor: colors.glassBorder, borderWidth: colors.borderWidth }]}> 
+              <LinearGradient colors={['rgba(255,255,255,0.18)', 'rgba(255,255,255,0.04)'] as any} style={StyleSheet.absoluteFill} />
+              <Text style={[styles.stickerPickerTitle, { color: colors.text }]}>Animated stickers</Text>
+              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.stickerGrid}>
+                {sortedStickers.map((sticker) => (
+                  <TouchableOpacity key={sticker.id} activeOpacity={0.78} onPress={() => sendSticker(sticker)} style={[styles.stickerChip, { borderColor: colors.glassBorder }]}> 
+                    <Text style={styles.stickerChipEmoji}>{sticker.emoji}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </BlurView>
           )}
 
           <BlurView
@@ -912,8 +970,12 @@ export const ChatScreen = ({ route, navigation }: any) => {
             }]}
           >
             <LinearGradient colors={['rgba(255,255,255,0.28)', 'rgba(255,255,255,0.1)', 'rgba(255,255,255,0.04)'] as any} style={StyleSheet.absoluteFill} />
-            <TouchableOpacity onPress={handleAttach} style={[styles.pillAction, styles.inputIconButton, { borderColor: colors.glassBorder }]}>
+            <TouchableOpacity onPress={handleAttach} style={[styles.pillAction, styles.inputIconButton, { borderColor: colors.glassBorder }]}> 
               <Camera size={21} color={colors.primary} strokeWidth={2} />
+            </TouchableOpacity>
+
+            <TouchableOpacity onPress={() => setIsStickerPickerOpen((open) => !open)} style={[styles.pillAction, styles.inputIconButton, { borderColor: isStickerPickerOpen ? colors.primary : colors.glassBorder }]}> 
+              <SmilePlus size={20} color={isStickerPickerOpen ? colors.tertiary : colors.primary} strokeWidth={2} />
             </TouchableOpacity>
 
             <View style={styles.inputTextWrap}>
@@ -1032,6 +1094,11 @@ const styles = StyleSheet.create({
   sendBtn: { width: 40, height: 40, borderRadius: 20, marginLeft: 2, borderWidth: 0.5, backgroundColor: 'rgba(255,255,255,0.1)' },
   sendBtnGradient: { flex: 1, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
   sendBtnShine: { position: 'absolute', top: 1, left: 5, right: 5, height: 13, borderRadius: 999, opacity: 0.34 },
+  stickerPicker: { height: 214, borderRadius: 24, paddingVertical: 12, marginBottom: 8, overflow: 'hidden' },
+  stickerPickerTitle: { fontSize: 12, fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase', paddingHorizontal: 16, marginBottom: 8 },
+  stickerGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 12, paddingBottom: 10, rowGap: 10, columnGap: 8 },
+  stickerChip: { width: '23%', height: 78, borderRadius: 20, borderWidth: 0.5, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.08)' },
+  stickerChipEmoji: { fontSize: 40, lineHeight: 48 },
 
   // Empty chat
   emptyChat: { alignItems: 'center', justifyContent: 'center', paddingVertical: 80, paddingHorizontal: 40 },

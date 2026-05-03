@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Modal, Alert, Image, ScrollView, TextInput, Linking } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Modal, Alert, Image, ScrollView, TextInput } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Camera, Edit3, Mail, User, Lock, Palette, LogOut, ChevronLeft, ShieldCheck, ArrowRight, X, Download } from 'lucide-react-native';
+import { Camera, Edit3, Mail, User, Lock, Palette, LogOut, ChevronLeft, ShieldCheck, ArrowRight, X } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
@@ -279,16 +279,6 @@ export const ProfileScreen = ({ navigation }: any) => {
               </LinearGradient>
             </TouchableOpacity>
           </View>
-        </SettingSection>
-
-        <SettingSection label="Developer">
-          <SettingItem 
-            icon={<Download size={20} color={colors.text} />} 
-            label="Download Resume" 
-            value="View PDF" 
-            onPress={() => Linking.openURL('https://drive.google.com/file/d/1mBN6ajP7a70U85v5MIuyLdBpkZiiFoFe/view?usp=drive_link')} 
-            isLast 
-          />
         </SettingSection>
 
         <View style={{ height: 30 }} />

@@ -7,7 +7,8 @@ import { BlurView } from 'expo-blur';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
-import { chatSettingsService, storageService } from '../services/supabaseService';
+import { chatSettingsService, isProfileOnline, profileService, storageService } from '../services/supabaseService';
+import { supabase } from '../services/supabase';
 import { chatBackgroundPresets, defaultChatBackgroundSettings, normalizeBackgroundOpacity } from '../utils/chatBackground';
 
 export const ChatSettingsScreen = ({ route, navigation }: any) => {
@@ -16,6 +17,7 @@ export const ChatSettingsScreen = ({ route, navigation }: any) => {
   const { colors, isDark, themeMode } = useTheme();
   const insets = useSafeAreaInsets();
   const [isBlocked, setIsBlocked] = useState(false);
+  const [partnerProfile, setPartnerProfile] = useState(partner);
   const [backgroundSettings, setBackgroundSettings] = useState(defaultChatBackgroundSettings);
   const [isUploadingBackground, setIsUploadingBackground] = useState(false);
   const [contentCounts, setContentCounts] = useState({ mediaCount: 0, linkCount: 0, docsCount: 0 });
@@ -39,6 +41,25 @@ export const ChatSettingsScreen = ({ route, navigation }: any) => {
       active = false;
     };
   }, [pairId]);
+
+  useEffect(() => {
+    if (!partner?.id) return;
+
+    let active = true;
+
+    profileService.getProfile(partner.id).then((profile) => {
+      if (active && profile) setPartnerProfile(profile);
+    });
+
+    const activeStatusChannel = profileService.subscribeToActiveStatus(partner.id, (_isActive, nextProfile) => {
+      if (active && nextProfile) setPartnerProfile(nextProfile);
+    });
+
+    return () => {
+      active = false;
+      supabase.removeChannel(activeStatusChannel);
+    };
+  }, [partner?.id]);
 
   const handleSelectBackground = async (backgroundId: string) => {
     setBackgroundSettings((current) => ({ ...current, background_id: backgroundId }));
@@ -157,11 +178,12 @@ export const ChatSettingsScreen = ({ route, navigation }: any) => {
     }
   };
 
-  const statusText = isBlocked ? 'Blocked' : 'Active';
-  const statusColor = isBlocked ? '#FF4B4B' : colors.tertiary;
-  const avatarSeed = partner?.name || partner?.email || 'Partner';
-  const avatarSource = partner?.avatar_url
-    ? { uri: partner.avatar_url }
+  const isOnline = isProfileOnline(partnerProfile);
+  const statusText = isBlocked ? 'Blocked' : isOnline ? 'Online' : 'Offline';
+  const statusColor = isBlocked ? '#FF4B4B' : isOnline ? colors.tertiary : colors.gray;
+  const avatarSeed = partnerProfile?.name || partnerProfile?.email || 'Partner';
+  const avatarSource = partnerProfile?.avatar_url
+    ? { uri: partnerProfile.avatar_url }
     : { uri: `https://api.dicebear.com/7.x/avataaars/svg?seed=${avatarSeed}` };
 
   return (
@@ -202,7 +224,7 @@ export const ChatSettingsScreen = ({ route, navigation }: any) => {
             source={avatarSource}
             style={[styles.profileAvatar, { borderRadius: colors.radius.pill, borderColor: colors.glassBorder }]}
           />
-          <Text style={[styles.profileName, { color: colors.text }]}>{partner?.name || 'Partner'}</Text>
+          <Text style={[styles.profileName, { color: colors.text }]}>{partnerProfile?.name || 'Partner'}</Text>
           <Text style={[styles.profileStatus, { color: statusColor }]}> 
             {statusText}
           </Text>

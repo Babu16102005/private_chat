@@ -8,6 +8,10 @@ type PushRequestBody = {
   title?: string;
   body?: string;
   data?: Record<string, unknown>;
+  channelId?: string;
+  priority?: 'default' | 'normal' | 'high';
+  sound?: string;
+  ttl?: number;
 };
 
 const corsHeaders = {
@@ -45,7 +49,7 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: 'Invalid JSON body' }, 400);
   }
 
-  const { recipientId, type, title, body, data = {} } = payload;
+  const { recipientId, type, title, body, data = {}, channelId, priority, sound = 'default', ttl } = payload;
   if (!recipientId || !type || !title || !body) {
     return jsonResponse({ error: 'recipientId, type, title, and body are required' }, 400);
   }
@@ -104,8 +108,10 @@ Deno.serve(async (req) => {
     },
     body: JSON.stringify({
       to: pushToken,
-      sound: 'default',
-      priority: 'high',
+      sound,
+      priority: priority || (type === 'call' ? 'high' : 'default'),
+      channelId: channelId || (type === 'call' ? 'calls' : 'messages'),
+      ttl: ttl ?? (type === 'call' ? 45 : undefined),
       title,
       body,
       data: { ...data, type },

@@ -9,9 +9,12 @@ type PushNotificationPayload = {
   title: string;
   body: string;
   data?: Record<string, any>;
+  channelId?: 'messages' | 'calls';
+  priority?: 'default' | 'normal' | 'high';
+  ttl?: number;
 };
 
-export type MessageType = 'text' | 'image' | 'video' | 'audio' | 'voice' | 'document' | 'system_call' | 'encrypted';
+export type MessageType = 'text' | 'image' | 'video' | 'audio' | 'voice' | 'document' | 'system_call' | 'encrypted' | 'sticker';
 
 export type SendMessageOptions = {
   fileName?: string;
@@ -23,6 +26,14 @@ export type SendMessageOptions = {
   callDurationSeconds?: number;
   callKind?: 'audio' | 'video';
   callStatus?: 'completed' | 'missed' | 'rejected' | 'cancelled';
+};
+
+const ONLINE_TIMEOUT_MS = 45000;
+const createPostgresChannelName = (name: string) => `${name}:${Date.now()}:${Math.random().toString(36).slice(2)}`;
+
+export const isProfileOnline = (profile?: { is_active?: boolean | null; last_seen?: string | null } | null) => {
+  if (!profile?.is_active || !profile.last_seen) return false;
+  return Date.now() - new Date(profile.last_seen).getTime() < ONLINE_TIMEOUT_MS;
 };
 
 const getPairRecipientId = async (pairId: string, senderId: string) => {
@@ -61,6 +72,7 @@ const buildMessageNotificationBody = (content: string, messageType: string) => {
   if (messageType === 'document') return 'Sent you a document';
   if (messageType === 'system_call') return content || 'Call ended';
   if (messageType === 'encrypted') return 'Sent you an encrypted message';
+  if (messageType === 'sticker') return 'Sent you a sticker';
   if (messageType === 'audio' || messageType === 'voice') return 'Sent you a voice message';
   return content || 'Sent you a message';
 };
@@ -87,6 +99,8 @@ export const notificationService = {
       type: 'message',
       title: senderName,
       body: buildMessageNotificationBody(message.content || '', messageType),
+      channelId: 'messages',
+      priority: 'high',
       data: {
         pairId,
         messageId: message.id,
@@ -95,7 +109,7 @@ export const notificationService = {
     });
   },
 
-  async sendCallPush(pairId: string, recipientId: string, isVideo: boolean) {
+  async sendCallPush(pairId: string, recipientId: string, isVideo: boolean, callInviteId?: string) {
     const user = await authService.getCurrentUser();
     if (!user) return;
 
@@ -107,8 +121,12 @@ export const notificationService = {
       type: 'call',
       title: `${senderName} is calling`,
       body: `Incoming ${callType} call`,
+      channelId: 'calls',
+      priority: 'high',
+      ttl: 45,
       data: {
         pairId,
+        callInviteId,
         callerId: user.id,
         callerName: senderName,
         isVideo,
@@ -170,7 +188,7 @@ export const callInviteService = {
 
   subscribeToIncomingCallInvites(userId: string, callback: (invite: any) => void) {
     return supabase
-      .channel(`call-invites:${userId}`)
+      .channel(createPostgresChannelName(`call-invites:${userId}`))
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'call_invites', filter: `callee_id=eq.${userId}` },
@@ -182,9 +200,13 @@ export const callInviteService = {
 
 // Authentication Services
 export const authService = {
-  async signUp(email: string, password: string) {
+  async signUp(email: string, password: string, name?: string) {
     try {
-      const { data, error } = await supabase.auth.signUp({ email, password });
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: name ? { data: { name } } : undefined,
+      });
       if (error) throw error;
       return data;
     } catch (error) {
@@ -273,9 +295,13 @@ export const profileService = {
     }
   },
 
-  async createUserProfile(userId: string, email: string) {
+  async createUserProfile(userId: string, email: string, name?: string) {
     try {
-      const { data, error } = await supabase.from('users').insert({ id: userId, email: email }).select().single();
+      const { data, error } = await supabase
+        .from('users')
+        .upsert({ id: userId, email, ...(name ? { name } : {}) }, { onConflict: 'id' })
+        .select()
+        .single();
       if (error) throw error;
       return data;
     } catch (error) {
@@ -298,13 +324,13 @@ export const profileService = {
     }
   },
 
-  subscribeToActiveStatus(userId: string, callback: (isActive: boolean) => void) {
+  subscribeToActiveStatus(userId: string, callback: (isActive: boolean, profile?: any) => void) {
     const channel = supabase
-      .channel(`user-active-status:${userId}`)
+      .channel(createPostgresChannelName(`user-active-status:${userId}`))
       .on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'users', filter: `id=eq.${userId}` },
-        (payload) => callback(!!payload.new?.is_active)
+        (payload) => callback(isProfileOnline(payload.new), payload.new)
       )
       .subscribe();
 
@@ -469,7 +495,7 @@ export const inviteService = {
   
   subscribeToInvites(callback: (invite: any) => void) {
     return supabase
-      .channel('invites-channel')
+      .channel(createPostgresChannelName('invites-channel'))
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'invites' },
@@ -571,11 +597,11 @@ export const messageService = {
   },
 
   subscribeToMessages(pairId: string, callback: (message: any) => void) {
-    return supabase.channel(`messages:${pairId}`).on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `pair_id=eq.${pairId}` }, (p) => callback(p.new)).subscribe();
+    return supabase.channel(createPostgresChannelName(`messages:${pairId}`)).on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `pair_id=eq.${pairId}` }, (p) => callback(p.new)).subscribe();
   },
 
   subscribeToTyping(pairId: string, userId: string, callback: (isTyping: boolean) => void) {
-    const channel = supabase.channel(`typing:${pairId}`);
+    const channel = supabase.channel(createPostgresChannelName(`typing:${pairId}`));
     channel.on('presence', { event: 'sync' }, () => {
         const state: any = channel.presenceState();
         const typing = Object.values(state).flat().some((p: any) => p.user_id !== userId && p.is_typing);
@@ -662,7 +688,7 @@ export const messageReactionsService = {
   },
 
   subscribeToReactions(messageId: string, callback: () => void) {
-    return supabase.channel(`reactions:${messageId}`).on('postgres_changes', { event: '*', schema: 'public', table: 'message_reactions', filter: `message_id=eq.${messageId}` }, callback).subscribe();
+    return supabase.channel(createPostgresChannelName(`reactions:${messageId}`)).on('postgres_changes', { event: '*', schema: 'public', table: 'message_reactions', filter: `message_id=eq.${messageId}` }, callback).subscribe();
   }
 };
 
@@ -882,7 +908,7 @@ export const storyService = {
 
   subscribeToStories(callback: () => void) {
     return supabase
-      .channel('stories-feed')
+      .channel(createPostgresChannelName('stories-feed'))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'stories' }, callback)
       .subscribe();
   },

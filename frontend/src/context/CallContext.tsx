@@ -133,6 +133,8 @@ const callLog = (message: string, details?: Record<string, any>) => {
   }
 };
 
+const createCallChannelName = (name: string) => `${name}:${Date.now()}:${Math.random().toString(36).slice(2)}`;
+
 const ensureAndroidMediaPermissions = async (wantsVideo: boolean) => {
   if (Platform.OS !== 'android') return;
 
@@ -318,7 +320,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const ensureOutboundChannel = useCallback((targetUserId: string) => {
     removeChannel(outboundChannel);
 
-    const channel = supabase.channel(`calls:${targetUserId}`);
+    const channel = supabase.channel(createCallChannelName(`calls:${targetUserId}`));
     outboundChannel.current = channel;
     callLog('subscribing outbound channel', { targetUserId });
     
@@ -365,7 +367,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     if (!user) return;
 
-    const globalChannel = supabase.channel(`calls:${user.id}`)
+    const globalChannel = supabase.channel(createCallChannelName(`calls:${user.id}`))
       .on('broadcast', { event: '*' }, async ({ event, payload }: any) => {
         if (!payload) return;
 
@@ -434,7 +436,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       })
       .subscribe((status: string) => {
         if (status === 'CHANNEL_ERROR') {
-          console.warn('Call channel disconnected — will attempt auto-reconnect...');
+          callLog('inbound call channel disconnected', { userId: user.id });
         }
       });
 
@@ -623,7 +625,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isVideo,
         callInviteId: callInvite.id,
       });
-      notificationService.sendCallPush(pairId, targetUserId, isVideo);
+      notificationService.sendCallPush(pairId, targetUserId, isVideo, callInvite.id);
       startCallTone('ringback');
     } catch (error: any) {
       console.error('Call start failed:', error);

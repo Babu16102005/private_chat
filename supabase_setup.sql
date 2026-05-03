@@ -54,7 +54,7 @@ CREATE TABLE IF NOT EXISTS public.messages (
   sender_id            UUID        REFERENCES public.users(id)    ON DELETE CASCADE NOT NULL,
   content              TEXT,
   media_url            TEXT,
-  message_type         TEXT        DEFAULT 'text' CHECK (message_type IN ('text', 'image', 'video', 'audio', 'voice', 'document', 'system_call', 'encrypted')),
+  message_type         TEXT        DEFAULT 'text' CHECK (message_type IN ('text', 'image', 'video', 'audio', 'voice', 'document', 'system_call', 'encrypted', 'sticker')),
   file_name            TEXT,
   file_size            BIGINT,
   mime_type            TEXT,
@@ -170,8 +170,8 @@ CREATE INDEX IF NOT EXISTS idx_call_invites_pair_created ON public.call_invites(
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
-  INSERT INTO public.users (id, email)
-  VALUES (NEW.id, NEW.email);
+  INSERT INTO public.users (id, email, name)
+  VALUES (NEW.id, NEW.email, NEW.raw_user_meta_data->>'name');
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
@@ -700,7 +700,7 @@ ALTER TABLE public.messages
 ALTER TABLE public.messages
   DROP CONSTRAINT IF EXISTS messages_message_type_check;
 ALTER TABLE public.messages
-  ADD CONSTRAINT messages_message_type_check CHECK (message_type IN ('text', 'image', 'video', 'audio', 'voice', 'document', 'system_call', 'encrypted'));
+  ADD CONSTRAINT messages_message_type_check CHECK (message_type IN ('text', 'image', 'video', 'audio', 'voice', 'document', 'system_call', 'encrypted', 'sticker'));
 
 ALTER TABLE public.messages
   DROP CONSTRAINT IF EXISTS messages_call_kind_check;

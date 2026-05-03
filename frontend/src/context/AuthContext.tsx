@@ -5,6 +5,8 @@ import { supabase } from '../services/supabase';
 import { authService, profileService } from '../services/supabaseService';
 import { Session, User } from '@supabase/supabase-js';
 
+const ACTIVE_STATUS_HEARTBEAT_MS = 25000;
+
 type AuthContextType = {
   session: Session | null;
   user: User | null;
@@ -75,8 +77,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         if (session?.user) {
           try {
             const profile = await profileService.getProfile(session.user.id);
+            const name = session.user.user_metadata?.name;
             if (!profile) {
-              await profileService.createUserProfile(session.user.id, session.user.email!);
+              await profileService.createUserProfile(session.user.id, session.user.email!, name);
+            } else if (name && !profile.name) {
+              await profileService.updateProfile(session.user.id, { name });
             }
           } catch (e) {
             console.error('Profile error:', e);
@@ -115,8 +120,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       if (event === 'SIGNED_IN' && session?.user) {
         try {
           const profile = await profileService.getProfile(session.user.id);
+          const name = session.user.user_metadata?.name;
           if (!profile) {
-            await profileService.createUserProfile(session.user.id, session.user.email!);
+            await profileService.createUserProfile(session.user.id, session.user.email!, name);
+          } else if (name && !profile.name) {
+            await profileService.updateProfile(session.user.id, { name });
           }
         } catch (e) {}
       }
@@ -132,21 +140,51 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const userId = session?.user?.id;
     if (!userId) return;
 
-    profileService.updateActiveStatus(userId, AppState.currentState === 'active');
+    let heartbeat: ReturnType<typeof setInterval> | null = null;
+
+    const stopHeartbeat = () => {
+      if (heartbeat) {
+        clearInterval(heartbeat);
+        heartbeat = null;
+      }
+    };
+
+    const startHeartbeat = () => {
+      stopHeartbeat();
+      profileService.updateActiveStatus(userId, true);
+      heartbeat = setInterval(() => {
+        if (AppState.currentState === 'active') {
+          profileService.updateActiveStatus(userId, true);
+        }
+      }, ACTIVE_STATUS_HEARTBEAT_MS);
+    };
+
+    if (AppState.currentState === 'active') {
+      startHeartbeat();
+    } else {
+      profileService.updateActiveStatus(userId, false);
+    }
+
     const subscription = AppState.addEventListener('change', (state) => {
-      profileService.updateActiveStatus(userId, state === 'active');
+      if (state === 'active') {
+        startHeartbeat();
+      } else {
+        stopHeartbeat();
+        profileService.updateActiveStatus(userId, false);
+      }
     });
 
     return () => {
+      stopHeartbeat();
       subscription.remove();
       profileService.updateActiveStatus(userId, false);
     };
   }, [session?.user?.id]);
 
   const signUp = async (email: string, password: string, name?: string) => {
-    const result = await authService.signUp(email, password);
+    const result = await authService.signUp(email, password, name);
     if (name && result?.user) {
-      await profileService.updateProfile(result.user.id, { name });
+      await profileService.createUserProfile(result.user.id, email, name);
     }
     return result;
   };

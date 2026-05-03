@@ -10,6 +10,7 @@ import { navigate } from '../navigation/navigationRef';
 type NotificationData = {
   type?: string;
   pairId?: string;
+  callInviteId?: string;
   senderId?: string;
   callerId?: string;
   callerName?: string;
@@ -117,6 +118,11 @@ const handleNotificationResponse = async (
       ? senderId === pair.user_a_id ? pair.user_a : pair.user_b
       : pair.partner || pair.user_a || pair.user_b;
 
+    if (data.type === 'call') {
+      navigate('Chat', { pairId, partner });
+      return;
+    }
+
     navigate('Chat', { pairId, partner });
   } catch (error) {
     console.warn('[PushNotifications] Failed to open notification target:', error);
@@ -132,11 +138,19 @@ async function registerForPushNotificationsAsync(isExpoGo: boolean) {
   try {
     let token;
     if (Platform.OS === 'android') {
-      await Notifications.setNotificationChannelAsync('default', {
-        name: 'default',
+      await Notifications.setNotificationChannelAsync('messages', {
+        name: 'Messages',
+        importance: Notifications.AndroidImportance.HIGH,
+        vibrationPattern: [0, 180, 120, 180],
+        lightColor: '#64F3FF',
+      });
+
+      await Notifications.setNotificationChannelAsync('calls', {
+        name: 'Calls',
         importance: Notifications.AndroidImportance.MAX,
         vibrationPattern: [0, 250, 250, 250],
         lightColor: '#D81B60',
+        lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
       });
     }
 
@@ -152,8 +166,15 @@ async function registerForPushNotificationsAsync(isExpoGo: boolean) {
     try {
       const projectId = Constants.expoConfig?.extra?.eas?.projectId || Constants.easConfig?.projectId;
       token = (await Notifications.getExpoPushTokenAsync(projectId ? { projectId } : undefined)).data;
-    } catch (e) {
-      console.warn('[PushNotifications] getExpoPushTokenAsync failed:', e);
+    } catch (e: any) {
+      const message = e?.message || String(e);
+      if (Platform.OS === 'android' && message.includes('Default FirebaseApp is not initialized')) {
+        console.warn(
+          '[PushNotifications] Android FCM is not configured for this build. Add Firebase credentials for com.chatapplication.app in EAS/Expo, then rebuild the native app.'
+        );
+      } else {
+        console.warn('[PushNotifications] getExpoPushTokenAsync failed:', e);
+      }
       return undefined;
     }
     

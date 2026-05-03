@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Linking, ActivityIndicator } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Linking, ActivityIndicator, Share } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
+import * as Clipboard from 'expo-clipboard';
+import * as MailComposer from 'expo-mail-composer';
 import { ArrowLeft, UserPlus, Mail } from 'lucide-react-native';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
@@ -53,8 +54,23 @@ export const InviteScreen = () => {
     if (!pairEmail.trim()) { handleError('Please enter your partner\'s email'); return; }
     setLoading(true);
     try {
-      await inviteService.sendInvite(pairEmail);
-      Alert.alert('Invite Sent!', `Your partner will receive an invite at ${pairEmail}.`);
+      const invite = await inviteService.sendInvite(pairEmail);
+      const recipientEmail = pairEmail.toLowerCase().trim();
+      const inviteLink = invite.deep_link;
+      const message = `Join me on Kiba for a private chat: ${inviteLink}`;
+
+      if (await MailComposer.isAvailableAsync()) {
+        await MailComposer.composeAsync({
+          recipients: [recipientEmail],
+          subject: 'Kiba private chat invite',
+          body: message,
+        });
+      } else {
+        await Clipboard.setStringAsync(inviteLink);
+        await Share.share({ message });
+      }
+
+      Alert.alert('Invite Ready', `The invite link for ${recipientEmail} was created. If the email composer did not send it, the link has been copied so you can share it manually.`);
       navigation.navigate('Home');
     } catch (error: any) { handleError(error, 'Failed to send invite'); }
     finally { setLoading(false); }

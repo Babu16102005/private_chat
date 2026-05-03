@@ -6,7 +6,7 @@ import { Search, Plus, MessageCircle, X, Check, CheckCheck, Settings, CirclePlus
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { useAuth } from '../context/AuthContext';
-import { inviteService, messageService, profileService, storyService } from '../services/supabaseService';
+import { inviteService, isProfileOnline, messageService, profileService, storyService } from '../services/supabaseService';
 import { supabase } from '../services/supabase';
 import { useTheme } from '../context/ThemeContext';
 
@@ -21,7 +21,6 @@ export const HomeScreen = ({ navigation }: any) => {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [onlineStatus, setOnlineStatus] = useState<Record<string, boolean>>({});
-  const [typingStatus, setTypingStatus] = useState<Record<string, boolean>>({});
   const [stories, setStories] = useState<any[]>([]);
   const loadingPulse = useRef(new Animated.Value(0.45)).current;
   const loadingOpacityStyle = { opacity: loadingPulse } as any;
@@ -73,25 +72,25 @@ export const HomeScreen = ({ navigation }: any) => {
     const partnerId = partnerProfile?.id;
 
     if (partnerId) {
-      setOnlineStatus(prev => ({ ...prev, [chat.id]: !!partnerProfile?.is_active }));
+      setOnlineStatus(prev => ({ ...prev, [chat.id]: isProfileOnline(partnerProfile) }));
 
-      const activeStatusChannel = profileService.subscribeToActiveStatus(partnerId, (isActive: boolean) => {
+      const activeStatusChannel = profileService.subscribeToActiveStatus(partnerId, (isActive: boolean, nextProfile: any) => {
         if (isMountedRef.current) {
           setOnlineStatus(prev => ({ ...prev, [chat.id]: isActive }));
+          setChats(prev => prev.map(currentChat => {
+            if (currentChat.id !== chat.id) return currentChat;
+
+            return {
+              ...currentChat,
+              partner: currentChat.partner ? { ...currentChat.partner, ...nextProfile } : currentChat.partner,
+              user_a: currentChat.user_a?.id === partnerId ? { ...currentChat.user_a, ...nextProfile } : currentChat.user_a,
+              user_b: currentChat.user_b?.id === partnerId ? { ...currentChat.user_b, ...nextProfile } : currentChat.user_b,
+            };
+          }));
         }
       });
       subs.push(activeStatusChannel);
     }
-
-    const presenceChannel = messageService.subscribeToPresence(chat.id, userId, () => {});
-    subs.push(presenceChannel);
-
-    const typingChannel = messageService.subscribeToTyping(chat.id, userId, (isTyping: boolean) => {
-      if (isMountedRef.current) {
-        setTypingStatus(prev => ({ ...prev, [chat.id]: isTyping }));
-      }
-    });
-    subs.push(typingChannel);
 
     subscriptionsRef.current.set(chat.id, subs);
   }, []);
@@ -190,8 +189,7 @@ export const HomeScreen = ({ navigation }: any) => {
 
   const renderChatItem = ({ item }: { item: any }) => {
     const partner = item.partner || (item.user_a_id === user!.id ? item.user_b : item.user_a);
-    const isOnline = onlineStatus[item.id];
-    const isTyping = typingStatus[item.id];
+    const isOnline = isProfileOnline(partner);
     const avatarSeed = partner?.name || partner?.email || 'User';
     const avatarSource = partner?.avatar_url
       ? { uri: partner.avatar_url }
@@ -231,35 +229,27 @@ export const HomeScreen = ({ navigation }: any) => {
             </View>
             <View style={styles.snippetRow}>
               <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-                {isTyping ? (
-                  <Text style={[styles.chatSnippet, styles.typingText, { color: colors.tertiary }]}>
-                    typing...
-                  </Text>
-                ) : (
+                {isLastMsgFromMe && (
                   <>
-                    {isLastMsgFromMe && (
-                      <>
-                        <Text style={[styles.youPrefix, { color: hasUnread ? 'rgba(255,255,255,0.72)' : colors.gray }]}>
-                          You:{' '}
-                        </Text>
-                        {lastMsg && (
-                          <View style={styles.tickInline}>
-                            {lastMsg.read_at ? (
-                              <CheckCheck size={14} color={colors.primary} strokeWidth={2} />
-                            ) : lastMsg.delivered_at ? (
-                              <CheckCheck size={14} color={colors.gray} strokeWidth={2} />
-                            ) : (
-                              <Check size={14} color={colors.gray} strokeWidth={2} />
-                            )}
-                          </View>
-                        )}
-                      </>
-                    )}
-                    <Text style={[styles.chatSnippet, { color: hasUnread ? colors.text : colors.gray }]} numberOfLines={1}>
-                      {lastMsg?.content || 'No messages yet'}
+                    <Text style={[styles.youPrefix, { color: hasUnread ? 'rgba(255,255,255,0.72)' : colors.gray }]}> 
+                      You:{' '}
                     </Text>
+                    {lastMsg && (
+                      <View style={styles.tickInline}>
+                        {lastMsg.read_at ? (
+                          <CheckCheck size={14} color={colors.primary} strokeWidth={2} />
+                        ) : lastMsg.delivered_at ? (
+                          <CheckCheck size={14} color={colors.gray} strokeWidth={2} />
+                        ) : (
+                          <Check size={14} color={colors.gray} strokeWidth={2} />
+                        )}
+                      </View>
+                    )}
                   </>
                 )}
+                <Text style={[styles.chatSnippet, { color: hasUnread ? colors.text : colors.gray }]} numberOfLines={1}>
+                  {lastMsg?.content || 'No messages yet'}
+                </Text>
               </View>
               {hasUnread && (
                 <LinearGradient colors={colors.gradientSecondary as any} style={styles.unreadBadge}>

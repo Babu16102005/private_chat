@@ -1,12 +1,13 @@
 import React, { useState, useRef, useEffect, memo } from 'react';
-import { View, Text, TouchableOpacity, Image, Alert, StyleSheet, Platform, Linking } from 'react-native';
+import { View, Text, TouchableOpacity, Image, Alert, StyleSheet, Platform, Linking, Animated } from 'react-native';
 import { Check, CheckCheck, FileText, Phone, Play, Pause, Reply } from 'lucide-react-native';
-import { Audio } from 'expo-av';
+import { createAudioPlayer, type AudioPlayer } from 'expo-audio';
 import { LinearGradient } from 'expo-linear-gradient';
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { useTheme } from '../context/ThemeContext';
 import { formatMessageTime } from '../utils/date';
+import { getStickerById } from '../utils/stickers';
 
 export interface ReplyToMessage {
   id: string;
@@ -25,7 +26,7 @@ interface MessageBubbleProps {
   onDelete?: () => void;
   onReply?: () => void;
   mediaUrl?: string;
-  messageType?: 'text' | 'image' | 'video' | 'audio' | 'voice' | 'document' | 'system_call' | 'encrypted';
+  messageType?: 'text' | 'image' | 'video' | 'audio' | 'voice' | 'document' | 'system_call' | 'encrypted' | 'sticker';
   fileName?: string;
   fileSize?: number | null;
   mimeType?: string | null;
@@ -111,9 +112,11 @@ export const MessageBubble: React.FC<MessageBubbleProps> = memo(
     const [isPlaying, setIsPlaying] = useState(false);
     const [progress, setProgress] = useState(0);
     const [duration, setDuration] = useState(0);
-    const soundRef = useRef<Audio.Sound | null>(null);
+    const playerRef = useRef<AudioPlayer | null>(null);
+    const stickerAnim = useRef(new Animated.Value(0)).current;
 
     const normalizedMessageType = messageType === 'voice' ? 'audio' : messageType;
+    const sticker = normalizedMessageType === 'sticker' ? getStickerById(mediaUrl || content) : undefined;
     const displayDuration = duration || audioDurationMs || 0;
 
     const isEmojiOnly = content
@@ -227,27 +230,27 @@ export const MessageBubble: React.FC<MessageBubbleProps> = memo(
     const playAudio = async () => {
       if (!mediaUrl) return;
       try {
-        // Stop any previous sound
-        if (soundRef.current) {
-          await soundRef.current.unloadAsync();
-          soundRef.current = null;
+        if (playerRef.current) {
+          playerRef.current.remove();
+          playerRef.current = null;
         }
 
-        const { sound } = await Audio.Sound.createAsync(
-          { uri: mediaUrl },
-          { shouldPlay: true },
-          (status) => {
-            if (status.isLoaded) {
-              setProgress(status.positionMillis || 0);
-              if (status.durationMillis) setDuration(status.durationMillis);
-              if (status.didJustFinish) {
-                setIsPlaying(false);
-                setProgress(0);
-              }
+        const player = createAudioPlayer({ uri: mediaUrl }, { updateInterval: 250 });
+        const subscription = player.addListener('playbackStatusUpdate', (status) => {
+          if (status.isLoaded) {
+            setProgress(Math.round((status.currentTime || 0) * 1000));
+            if (status.duration) setDuration(Math.round(status.duration * 1000));
+            if (status.didJustFinish) {
+              setIsPlaying(false);
+              setProgress(0);
+              subscription.remove();
+              player.remove();
+              if (playerRef.current === player) playerRef.current = null;
             }
           }
-        );
-        soundRef.current = sound;
+        });
+        player.play();
+        playerRef.current = player;
         setIsPlaying(true);
       } catch (error) {
         console.error('Failed to play audio:', error);
@@ -257,8 +260,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = memo(
     };
 
     const pauseAudio = async () => {
-      if (soundRef.current) {
-        await soundRef.current.pauseAsync();
+      if (playerRef.current) {
+        playerRef.current.pause();
         setIsPlaying(false);
       }
     };
@@ -273,9 +276,9 @@ export const MessageBubble: React.FC<MessageBubbleProps> = memo(
     // Cleanup audio when component unmounts
     useEffect(() => {
       return () => {
-        if (soundRef.current) {
-          soundRef.current.unloadAsync();
-          soundRef.current = null;
+        if (playerRef.current) {
+          playerRef.current.remove();
+          playerRef.current = null;
         }
       };
     }, []);
@@ -292,14 +295,11 @@ export const MessageBubble: React.FC<MessageBubbleProps> = memo(
             return;
           }
 
-          const { sound, status } = await Audio.Sound.createAsync(
-            { uri: mediaUrl },
-            { shouldPlay: false }
-          );
-          if (status.isLoaded && status.durationMillis && isMounted) {
-            setDuration(status.durationMillis);
+          const player = createAudioPlayer({ uri: mediaUrl });
+          if (player.duration && isMounted) {
+            setDuration(Math.round(player.duration * 1000));
           }
-          await sound.unloadAsync();
+          player.remove();
         } catch (error) {
           console.warn('Failed to load audio duration:', error);
         }
@@ -312,6 +312,36 @@ export const MessageBubble: React.FC<MessageBubbleProps> = memo(
       };
     }, [audioDurationMs, duration, mediaUrl, normalizedMessageType]);
 
+    useEffect(() => {
+      if (!sticker) return;
+
+      stickerAnim.setValue(0);
+      const loop = Animated.loop(
+        Animated.sequence([
+          Animated.timing(stickerAnim, { toValue: 1, duration: 850, useNativeDriver: true }),
+          Animated.timing(stickerAnim, { toValue: 0, duration: 850, useNativeDriver: true }),
+        ])
+      );
+      loop.start();
+
+      return () => loop.stop();
+    }, [sticker, stickerAnim]);
+
+    const getStickerAnimatedStyle = () => {
+      if (!sticker) return null;
+
+      const scale = stickerAnim.interpolate({ inputRange: [0, 1], outputRange: [0.92, 1.12] });
+      const translateY = stickerAnim.interpolate({ inputRange: [0, 1], outputRange: [5, -7] });
+      const rotate = stickerAnim.interpolate({ inputRange: [0, 1], outputRange: ['-7deg', '7deg'] });
+
+      if (sticker.animation === 'pulse') return { transform: [{ scale }] };
+      if (sticker.animation === 'float') return { transform: [{ translateY }] };
+      if (sticker.animation === 'spin') return { transform: [{ rotate }] };
+      if (sticker.animation === 'shake') return { transform: [{ rotate }, { translateY: stickerAnim.interpolate({ inputRange: [0, 1], outputRange: [0, -2] }) }] };
+      if (sticker.animation === 'bounce') return { transform: [{ translateY }, { scale }] };
+      return { transform: [{ scale }, { rotate }] };
+    };
+
     const renderQuotedMessage = () => {
       if (!replyToMessage) return null;
       return (
@@ -322,7 +352,9 @@ export const MessageBubble: React.FC<MessageBubbleProps> = memo(
               {replyToMessage.senderName}
             </Text>
           </View>
-          {replyToMessage.messageType === 'image' ? (
+          {replyToMessage.messageType === 'sticker' ? (
+            <Text style={[styles.quoteText, { color: colors.gray }]} numberOfLines={1}>Sticker</Text>
+          ) : replyToMessage.messageType === 'image' ? (
             <Text style={[styles.quoteText, { color: colors.gray }]} numberOfLines={1}>Photo</Text>
           ) : replyToMessage.messageType === 'audio' ? (
             <Text style={[styles.quoteText, { color: colors.gray }]} numberOfLines={1}>Voice message</Text>
@@ -480,8 +512,20 @@ export const MessageBubble: React.FC<MessageBubbleProps> = memo(
             </TouchableOpacity>
           ) : null}
 
+          {normalizedMessageType === 'sticker' && sticker ? (
+            <View style={styles.stickerWrap}>
+              <Animated.View style={[styles.stickerGlow, { backgroundColor: sticker.accent }, { opacity: stickerAnim.interpolate({ inputRange: [0, 1], outputRange: [0.14, 0.34] }), transform: [{ scale: stickerAnim.interpolate({ inputRange: [0, 1], outputRange: [0.82, 1.12] }) }] }]} />
+              <Animated.Text style={[styles.stickerEmoji, getStickerAnimatedStyle()]}>{sticker.emoji}</Animated.Text>
+              <View style={styles.stickerSparkRow}>
+                <Animated.Text style={[styles.stickerSpark, { opacity: stickerAnim }]}>✦</Animated.Text>
+                <Animated.Text style={[styles.stickerSpark, { opacity: stickerAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 0.2] }) }]}>✧</Animated.Text>
+                <Animated.Text style={[styles.stickerSpark, { opacity: stickerAnim }]}>✦</Animated.Text>
+              </View>
+            </View>
+          ) : null}
+
           {/* Text content */}
-          {content ? (
+          {content && normalizedMessageType !== 'sticker' ? (
             <View style={styles.textContent}>
               {isEmojiOnly
                 ? <Text style={styles.emojiText}>{content}</Text>
@@ -559,6 +603,39 @@ const styles = StyleSheet.create({
   },
   textContent: {
     marginBottom: 6,
+  },
+  stickerWrap: {
+    width: 132,
+    minHeight: 132,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginHorizontal: -4,
+    marginTop: -2,
+    marginBottom: 6,
+  },
+  stickerGlow: {
+    position: 'absolute',
+    width: 116,
+    height: 116,
+    borderRadius: 58,
+    opacity: 0.2,
+  },
+  stickerEmoji: {
+    fontSize: 70,
+    lineHeight: 82,
+  },
+  stickerSparkRow: {
+    position: 'absolute',
+    top: 14,
+    left: 14,
+    right: 14,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  stickerSpark: {
+    color: '#FFE8A3',
+    fontSize: 16,
+    fontWeight: '900',
   },
   metaRow: {
     flexDirection: 'row',

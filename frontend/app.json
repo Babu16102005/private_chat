@@ -15,6 +15,10 @@
     "assetBundlePatterns": [
       "**/*"
     ],
+    "updates": {
+      "url": "https://u.expo.dev/b1944efe-bfdd-404f-8579-4a80b41bf61d",
+      "enabled": false
+    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.chatapplication.app",
@@ -52,12 +56,15 @@
         "android.permission.CAMERA",
         "android.permission.INTERNET",
         "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.POST_NOTIFICATIONS",
         "android.permission.RECORD_AUDIO",
         "android.permission.SYSTEM_ALERT_WINDOW",
         "android.permission.WAKE_LOCK",
         "android.permission.BLUETOOTH"
       ],
-      "runtimeVersion": "1.0.0"
+      "runtimeVersion": {
+        "policy": "appVersion"
+      }
     },
     "web": {
       "favicon": "./assets/kibabg_centered.png"
@@ -72,7 +79,8 @@
         }
       ],
       "expo-audio",
-      "expo-asset"
+      "expo-asset",
+      "expo-mail-composer"
     ],
     "owner": "babu_b",
     "extra": {

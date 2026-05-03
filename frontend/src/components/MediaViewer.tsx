@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Modal, View, Image, TouchableOpacity, StyleSheet, Dimensions, Text, StatusBar, Platform, Alert } from 'react-native';
-import { Audio } from 'expo-av';
+import { createAudioPlayer, type AudioPlayer } from 'expo-audio';
 
 const { height } = Dimensions.get('window');
 
@@ -15,23 +15,26 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({ uri, visible, onClose,
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
-  const soundRef = useRef<Audio.Sound | null>(null);
+  const playerRef = useRef<AudioPlayer | null>(null);
 
   const playAudio = async () => {
     try {
-      const { sound } = await Audio.Sound.createAsync({ uri }, { shouldPlay: true });
-      soundRef.current = sound;
-
-      sound.setOnPlaybackStatusUpdate((s: any) => {
-        if (s.isLoaded) {
-          setProgress(s.positionMillis || 0);
-          if (s.durationMillis) setDuration(s.durationMillis);
-          if (s.didJustFinish) {
+      const player = createAudioPlayer({ uri }, { updateInterval: 250 });
+      const subscription = player.addListener('playbackStatusUpdate', (status) => {
+        if (status.isLoaded) {
+          setProgress(Math.round((status.currentTime || 0) * 1000));
+          if (status.duration) setDuration(Math.round(status.duration * 1000));
+          if (status.didJustFinish) {
             setIsPlaying(false);
             setProgress(0);
+            subscription.remove();
+            player.remove();
+            if (playerRef.current === player) playerRef.current = null;
           }
         }
       });
+      player.play();
+      playerRef.current = player;
       setIsPlaying(true);
     } catch (error) {
       console.error('Failed to play audio:', error);
@@ -41,19 +44,16 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({ uri, visible, onClose,
   };
 
   const toggleAudioPlayback = async () => {
-    if (!soundRef.current) {
+    if (!playerRef.current) {
       await playAudio();
       return;
     }
 
-    const status = (await soundRef.current.getStatusAsync()) as any;
-    if (!status.isLoaded) return;
-
     if (isPlaying) {
-      await soundRef.current.pauseAsync();
+      playerRef.current.pause();
       setIsPlaying(false);
     } else {
-      await soundRef.current.playAsync();
+      playerRef.current.play();
       setIsPlaying(true);
     }
   };
@@ -61,9 +61,9 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({ uri, visible, onClose,
   useEffect(() => {
     if (!visible) {
       (async () => {
-        if (soundRef.current) {
-          await soundRef.current.unloadAsync();
-          soundRef.current = null;
+        if (playerRef.current) {
+          playerRef.current.remove();
+          playerRef.current = null;
         }
         setIsPlaying(false);
         setProgress(0);
